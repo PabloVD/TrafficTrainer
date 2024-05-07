@@ -1,14 +1,19 @@
 import argparse
+import torch
 from torch.utils.data import DataLoader
 import pytorch_lightning as L
 from model import LightningModel
 from waymo_dataset import WaymoDataset
+import glob
+
+torch.set_float32_matmul_precision('medium')
 
 IMG_RES = 224
 IN_CHANNELS = 25
 TL = 80
 N_TRAJS = 6
 DEVICE = "gpu"
+load_checkoint = False
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -101,7 +106,7 @@ def main():
         batch_size=batch_size,
         shuffle=True,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=True,
         persistent_workers=True,
     )
 
@@ -111,17 +116,20 @@ def main():
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=False,
+        pin_memory=True,
         persistent_workers=True,
     )
 
-    # load checkpoint
-    # checkpoint = glob.glob("./lightning_logs/version_5/checkpoints/*.ckpt")[0]
-    # model = LightningModel.load_from_checkpoint(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
-    
-    model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
+    # Load checkpoint
+    if load_checkoint:
+        checkpoint = glob.glob("./logs/"+model_name+"/lightning_logs/version_7/checkpoints/*.ckpt")[0]
+        print("Loading from checkpoint",checkpoint)
+        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
+    else:
+        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
-    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path)
+    print("Initializing trainer")
+    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed")
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

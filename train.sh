@@ -1,6 +1,8 @@
  #!/bin/bash
 
-export MODEL_NAME="resnet34"
+#export MODEL_NAME="resnet18"
+export MODEL_NAME="xception71"
+
 python3 lightning_train.py \
     --train-data /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/Waymo_Prerendered_train \
     --val-data /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/Waymo_Prerendered_valid \
