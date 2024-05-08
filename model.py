@@ -3,7 +3,6 @@ import numpy as np
 import timm
 import torch
 from torch import optim, nn
-from torch.optim.lr_scheduler import MultiStepLR
 import pytorch_lightning as L
 
 # CNN model
@@ -107,7 +106,7 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = MultiStepLR(optimizer, milestones=[50, 100], gamma=0.2, verbose=True)
+        scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-3*self.lr, max_lr=self.lr, cycle_momentum=False)
 
         return [optimizer], [scheduler]
         #return optimizer

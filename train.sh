@@ -1,7 +1,7 @@
  #!/bin/bash
 
-#export MODEL_NAME="resnet18"
-export MODEL_NAME="xception71"
+export MODEL_NAME="resnet18"
+#export MODEL_NAME="xception71"
 
 python3 lightning_train.py \
     --train-data /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/Waymo_Prerendered_train \
@@ -13,6 +13,6 @@ python3 lightning_train.py \
     --time-limit 80 \
     --n-traj 6 \
     --lr 0.001 \
-    --batch-size 64 \
+    --batch-size 100 \
     --n-epochs 10
     

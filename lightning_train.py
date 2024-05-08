@@ -5,6 +5,9 @@ import pytorch_lightning as L
 from model import LightningModel
 from waymo_dataset import WaymoDataset
 import glob
+from natsort import natsorted
+from pytorch_lightning.loggers import WandbLogger
+
 
 torch.set_float32_matmul_precision('medium')
 
@@ -13,7 +16,7 @@ IN_CHANNELS = 25
 TL = 80
 N_TRAJS = 6
 DEVICE = "gpu"
-load_checkoint = False
+load_checkoint = True
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -100,6 +103,12 @@ def main():
     n_epochs = args.n_epochs
     save_path = args.save_path
 
+    # WandB logger
+    wandb_logger = WandbLogger(project='TrafficTrainer')
+    wandb_logger.experiment.config["batch_size"] = batch_size
+    wandb_logger.experiment.config["model_name"] = model_name
+
+    # Training dataloader
     train_dataset = WaymoDataset(train_path)
     train_dataloader = DataLoader(
         train_dataset,
@@ -110,6 +119,7 @@ def main():
         persistent_workers=True,
     )
 
+    # Validation dataloader
     val_dataset = WaymoDataset(val_path)
     val_dataloader = DataLoader(
         val_dataset,
@@ -122,18 +132,18 @@ def main():
 
     # Load checkpoint
     if load_checkoint:
-        checkpoint = glob.glob("./logs/"+model_name+"/lightning_logs/version_7/checkpoints/*.ckpt")[0]
+        lastcheckpointdir = natsorted(glob.glob("./logs/"+model_name+"/lightning_logs/version_*"))[-1]
+        checkpoint = glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt")[0]
         print("Loading from checkpoint",checkpoint)
         model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
     else:
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed")
+    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed", logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
-        
 
 if __name__ == "__main__":
     main()
