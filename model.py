@@ -3,7 +3,7 @@ import numpy as np
 import timm
 import torch
 from torch import optim, nn
-import pytorch_lightning as L
+import lightning as L
 
 # CNN model
 class Model(nn.Module):

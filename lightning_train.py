@@ -1,12 +1,12 @@
 import argparse
 import torch
 from torch.utils.data import DataLoader
-import pytorch_lightning as L
+import lightning as L
 from model import LightningModel
 from waymo_dataset import WaymoDataset
 import glob
 from natsort import natsorted
-from pytorch_lightning.loggers import WandbLogger
+#from lightning.pytorch.loggers import WandbLogger
 
 
 torch.set_float32_matmul_precision('medium')
@@ -89,8 +89,7 @@ def main():
     train_path = args.train_data
     val_path = args.val_data
     batch_size = args.batch_size
-    num_workers = min(16, batch_size)
-    
+    num_workers = 14
 
     # Model parameters
     model_name = args.model
@@ -104,9 +103,9 @@ def main():
     save_path = args.save_path
 
     # WandB logger
-    wandb_logger = WandbLogger(project='TrafficTrainer')
-    wandb_logger.experiment.config["batch_size"] = batch_size
-    wandb_logger.experiment.config["model_name"] = model_name
+    # wandb_logger = WandbLogger(project='TrafficTrainer')
+    # wandb_logger.experiment.config["batch_size"] = batch_size
+    # wandb_logger.experiment.config["model_name"] = model_name
 
     # Training dataloader
     train_dataset = WaymoDataset(train_path)
@@ -140,7 +139,7 @@ def main():
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed", logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed")#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

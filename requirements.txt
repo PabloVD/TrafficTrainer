@@ -7,3 +7,4 @@ tqdm
 lightning
 matplotlib
 wandb
+natsort
