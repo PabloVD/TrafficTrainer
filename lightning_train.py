@@ -16,7 +16,7 @@ IN_CHANNELS = 25
 TL = 80
 N_TRAJS = 6
 DEVICE = "gpu"
-load_checkoint = True
+load_checkoint = False
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -89,7 +89,7 @@ def main():
     train_path = args.train_data
     val_path = args.val_data
     batch_size = args.batch_size
-    num_workers = 14
+    num_workers = 12
 
     # Model parameters
     model_name = args.model
@@ -115,7 +115,7 @@ def main():
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        #persistent_workers=True,
     )
 
     # Validation dataloader
@@ -126,7 +126,7 @@ def main():
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        #persistent_workers=True,
     )
 
     # Load checkpoint

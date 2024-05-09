@@ -110,3 +110,7 @@ class LightningModel(L.LightningModule):
 
         return [optimizer], [scheduler]
         #return optimizer
+
+    def forward(self, x):
+
+        return self.model(x)

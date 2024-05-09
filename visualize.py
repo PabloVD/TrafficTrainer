@@ -7,8 +7,30 @@ from matplotlib import pyplot as plt
 from matplotlib.pyplot import figure
 from torch.utils.data import DataLoader
 
-from train import WaymoLoader, pytorch_neg_multi_log_likelihood_batch
+from waymo_dataset import WaymoDataset
+from model import pytorch_neg_multi_log_likelihood_batch
+from natsort import natsorted
+import glob
+from model import LightningModel
+from tqdm import tqdm
 
+IMG_RES = 224
+IN_CHANNELS = 25
+TL = 80
+N_TRAJS = 6
+
+l2error = torch.nn.MSELoss(reduction="mean")
+
+# Compute average and final displacement error
+def displacement_error(x_true, x_pred):
+
+    x_true = torch.tensor(x_true)
+    x_pred = torch.tensor(x_pred)
+
+    ade = l2error(x_pred, x_true).item()
+    fde = l2error(x_pred[-1].reshape(1,2), x_true[-1].reshape(1,2)).item()
+
+    return ade, fde
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -28,28 +50,23 @@ def main():
     if not os.path.exists(args.save):
         os.mkdir(args.save)
 
-    model = torch.jit.load(args.model).cuda().eval()
+    #model = torch.jit.load(args.model).cuda().eval()
+    model_name = args.model
+    lastcheckpointdir = natsorted(glob.glob("./logs/"+model_name+"/lightning_logs/version_*"))[-1]
+    checkpoint = glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt")[0]
+    print("Loading from checkpoint",checkpoint)
+    model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3).cuda().eval()
     loader = DataLoader(
-        WaymoLoader(args.data, return_vector=True),
+        WaymoDataset(args.data, return_vector=True),
         batch_size=1,
         num_workers=1,
         shuffle=False,
     )
 
-    # loader = DataLoader(WaymoLoader(args.data, return_vector=True))
-
-    # data = next(iter(loader))
-
-    # print(data)
-
-    # exit()
-
     iii = 0
     with torch.no_grad():
-        for x, y, is_available, vector_data in loader:
+        for x, y, is_available, vector_data in tqdm(loader):
             x, y, is_available = map(lambda x: x.cuda(), (x, y, is_available))
-
-            print(vector_data.shape)
 
             confidences_logits, logits = model(x)
 
@@ -93,6 +110,11 @@ def main():
                 "-o",
                 label="pred top 1",
             )
+            # print(_X.shape)
+            # print(y[is_available > 0][:, :2].shape)
+            # print(logits[confidences.argmax()][is_available > 0][:, :2].shape)
+            ade, fde = displacement_error(y[is_available > 0][:, :2], logits[confidences.argmax()][is_available > 0][:, :2])
+
             if not args.use_top1:
                 for traj_id in range(len(logits)):
                     if traj_id == argmax:
@@ -108,7 +130,8 @@ def main():
                     )
 
 
-            plt.title(loss.item())
+            #plt.title(loss.item())
+            plt.title("ADE={:.2f}, FDE={:.2f}".format(ade,fde))
             plt.legend()
             plt.savefig(
                 os.path.join(args.save, f"{iii:0>2}_{loss.item():.3f}.png")
