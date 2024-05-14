@@ -73,6 +73,9 @@ def parse_args():
         default=1,
         help="Validate model each n epochs",
     )
+    parser.add_argument(
+        "--num-devices", type=int, required=False, help="Number of devices used for training", default=1
+    )
 
     args = parser.parse_args()
 
@@ -100,6 +103,7 @@ def main():
     # Training parameters
     n_epochs = args.n_epochs
     save_path = args.save_path
+    num_devices = args.num_devices
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')
@@ -140,7 +144,7 @@ def main():
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=4)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=num_devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
