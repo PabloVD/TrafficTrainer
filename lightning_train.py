@@ -128,7 +128,7 @@ def main():
         #persistent_workers=True,
     )
 
-    checkpoint_callback = ModelCheckpoint(dirpath=save_path, save_top_k=3, monitor="val_loss",filename=model_name+"-{epoch:02d}-{val_loss:.2f}")
+    checkpoint_callback = ModelCheckpoint(save_top_k=3, monitor="val_loss",filename=model_name+"-{epoch:02d}-{val_loss:.2f}")
 
     # Load checkpoint
     if load_checkoint:
@@ -140,7 +140,7 @@ def main():
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=4)#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=4)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
