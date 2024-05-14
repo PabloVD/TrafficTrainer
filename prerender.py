@@ -527,7 +527,11 @@ def rasterize(
                     )
 
         #raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)
-        raster = np.concatenate(RES_ROADSTIME + RES_EGO + RES_OTHER, axis=2)
+
+        timarray = np.array(RES_ROADSTIME)
+        roads_onechannel = timarray.mean(axis=-1)#,keepdims=True)
+        raster = roads_onechannel + np.array(RES_EGO).squeeze()/2. + np.array(RES_OTHER).squeeze()
+        raster = raster.transpose(1, 2, 0)
 
         raster_dict = {
             "object_id": agent_id,

@@ -114,7 +114,7 @@ def main():
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True,
-        #persistent_workers=True,
+        persistent_workers=True,
     )
 
     # Validation dataloader
@@ -125,7 +125,7 @@ def main():
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
-        #persistent_workers=True,
+        persistent_workers=True,
     )
 
     checkpoint_callback = ModelCheckpoint(save_top_k=3, monitor="val_loss",filename=model_name+"-{epoch:02d}-{val_loss:.2f}")
@@ -133,7 +133,7 @@ def main():
     # Load checkpoint
     if load_checkoint:
         lastcheckpointdir = natsorted(glob.glob("./logs/"+model_name+"/lightning_logs/version_*"))[-1]
-        checkpoint = glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt")[0]
+        checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
         print("Loading from checkpoint",checkpoint)
         model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
     else:
