@@ -7,7 +7,7 @@ from waymo_dataset import WaymoDataset
 import glob
 from natsort import natsorted
 #from lightning.pytorch.loggers import WandbLogger
-
+from lightning.pytorch.callbacks import ModelCheckpoint
 
 torch.set_float32_matmul_precision('medium')
 
@@ -60,7 +60,7 @@ def parse_args():
 
     parser.add_argument(
         #"--model", type=str, required=False, default="xception71", help="CNN model name"
-        "--model", type=str, required=False, default="resnet34", help="CNN model name"
+        "--model", type=str, required=False, default="resnet18", help="CNN model name"
     )
     parser.add_argument("--lr", type=float, required=False, default=1e-3)
     parser.add_argument("--batch-size", type=int, required=False, default=48)
@@ -77,7 +77,6 @@ def parse_args():
     args = parser.parse_args()
 
     return args
-
 
 
 
@@ -129,6 +128,8 @@ def main():
         #persistent_workers=True,
     )
 
+    checkpoint_callback = ModelCheckpoint(dirpath=save_path, save_top_k=3, monitor="val_loss",filename=model_name+"-{epoch:02d}-{val_loss:.2f}")
+
     # Load checkpoint
     if load_checkoint:
         lastcheckpointdir = natsorted(glob.glob("./logs/"+model_name+"/lightning_logs/version_*"))[-1]
@@ -139,7 +140,7 @@ def main():
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, val_check_interval=0.5, accelerator=DEVICE, default_root_dir=save_path,  precision="16-mixed")#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, accelerator=DEVICE, precision="16-mixed", callbacks=[checkpoint_callback], devices=4)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

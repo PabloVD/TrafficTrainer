@@ -82,6 +82,8 @@ class LightningModel(L.LightningModule):
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
+        # lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
+        # self.log("lr",lr)
 
         return loss
 
@@ -106,10 +108,10 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-3*self.lr, max_lr=self.lr, cycle_momentum=False)
+        #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-3*self.lr, max_lr=self.lr, cycle_momentum=False)
 
-        return [optimizer], [scheduler]
-        #return optimizer
+        #return [optimizer], [scheduler]
+        return optimizer
 
     def forward(self, x):
 
