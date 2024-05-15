@@ -4,6 +4,9 @@ import timm
 import torch
 from torch import optim, nn
 import lightning as L
+from torchvision.transforms import v2 as transf
+
+IMG_RES = 224
 
 # CNN model
 class Model(nn.Module):
@@ -75,10 +78,12 @@ class LightningModel(L.LightningModule):
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         self.lr = lr
+        self.transforms = transf.RandomResizedCrop(size=(IMG_RES, IMG_RES), antialias=True)
     
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
+        x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
@@ -108,9 +113,9 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-3*self.lr, max_lr=self.lr, cycle_momentum=False)
+        # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=1)#cycle_momentum=False)
 
-        #return [optimizer], [scheduler]
+        # return [optimizer], [scheduler]
         return optimizer
 
     def forward(self, x):

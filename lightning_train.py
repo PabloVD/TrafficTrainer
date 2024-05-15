@@ -11,7 +11,6 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 
 torch.set_float32_matmul_precision('medium')
 
-IMG_RES = 224
 IN_CHANNELS = 25
 TL = 80
 N_TRAJS = 6
@@ -25,13 +24,6 @@ def parse_args():
     )
     parser.add_argument(
         "--val-data", type=str, required=True, help="Path to rasterized data"
-    )
-    parser.add_argument(
-        "--img-res",
-        type=int,
-        required=False,
-        default=IMG_RES,
-        help="Input images resolution",
     )
     parser.add_argument(
         "--in-channels",
