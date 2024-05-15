@@ -4,7 +4,7 @@ import timm
 import torch
 from torch import optim, nn
 import lightning as L
-from torchvision.transforms import v2 as transf
+import torchvision.transforms as transf
 
 IMG_RES = 224
 
@@ -78,7 +78,11 @@ class LightningModel(L.LightningModule):
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         self.lr = lr
-        self.transforms = transf.RandomResizedCrop(size=(IMG_RES, IMG_RES), antialias=True)
+        self.transforms = transf.Compose([
+            transf.RandomRotation(10),
+            transf.RandomResizedCrop(size=(IMG_RES, IMG_RES)),
+        ])
+            
     
     def training_step(self, batch, batch_idx):
         
