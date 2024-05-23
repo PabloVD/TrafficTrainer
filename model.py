@@ -117,7 +117,7 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [15,30,45,60])
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
         # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=1)#cycle_momentum=False)
 
         return [optimizer], [scheduler]

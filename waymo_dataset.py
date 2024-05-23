@@ -2,7 +2,7 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 
-class WaymoDataset(Dataset):
+class WaymoLoader(Dataset):
     def __init__(self, directory, limit=0, return_vector=False, is_test=False):
         files = os.listdir(directory)
         self.files = [os.path.join(directory, f) for f in files if f.endswith(".npz")]
@@ -20,6 +20,7 @@ class WaymoDataset(Dataset):
 
     def __getitem__(self, idx):
         filename = self.files[idx]
+        
         data = np.load(filename, allow_pickle=True)
 
         raster = data["raster"].astype("float32")
@@ -46,6 +47,6 @@ class WaymoDataset(Dataset):
         is_available = data["future_val_marginal"]
 
         if self.return_vector:
-            return raster, trajectory, is_available, data["vector_data"]
+            return raster, trajectory, is_available, data["vector_data"], data["center"], data["shift"], data["yaw"], str(data["scenario_id"]), data["gt_all"]
 
         return raster, trajectory, is_available

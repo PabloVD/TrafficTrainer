@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 import lightning as L
 from model import LightningModel
-from waymo_dataset import WaymoDataset
+from waymo_dataset import WaymoLoader
 import glob
 from natsort import natsorted
 #from lightning.pytorch.loggers import WandbLogger
@@ -103,7 +103,7 @@ def main():
     # wandb_logger.experiment.config["model_name"] = model_name
 
     # Training dataloader
-    train_dataset = WaymoDataset(train_path)
+    train_dataset = WaymoLoader(train_path)
     train_dataloader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -114,7 +114,7 @@ def main():
     )
 
     # Validation dataloader
-    val_dataset = WaymoDataset(val_path)
+    val_dataset = WaymoLoader(val_path)
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=batch_size,
@@ -128,7 +128,7 @@ def main():
 
     # Load checkpoint
     if load_checkoint:
-        lastcheckpointdir = natsorted(glob.glob("./logs/"+model_name+"/lightning_logs/version_*"))[-1]
+        lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
         checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
         print("Loading from checkpoint",checkpoint)
         model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
