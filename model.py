@@ -73,11 +73,12 @@ def pytorch_neg_multi_log_likelihood_batch(gt, logits, confidences, avails):
 
 # Lightning Module
 class LightningModel(L.LightningModule):
-    def __init__(self, model_name, in_channels, time_limit, n_traj, lr=1.e-3):
+    def __init__(self, model_name, in_channels, time_limit, n_traj, lr=1.e-3, weight_decay=1.e-5):
         super().__init__()
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         self.lr = lr
+        self.weight_decay = weight_decay
         self.transforms = transf.Compose([
             transf.RandomRotation(10),
             transf.RandomResizedCrop(size=(IMG_RES, IMG_RES)),
@@ -116,7 +117,7 @@ class LightningModel(L.LightningModule):
 
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
         # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=1)#cycle_momentum=False)
 
