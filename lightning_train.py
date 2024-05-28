@@ -91,11 +91,13 @@ def main():
     time_limit = args.time_limit
     n_traj = args.n_traj
     lr = args.lr
+    weight_decay = 1.e-5
 
     # Training parameters
     n_epochs = args.n_epochs
     save_path = args.save_path
-    num_devices = args.num_devices
+    # devices = args.num_devices
+    devices = [0,1,2,3]
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')
@@ -131,12 +133,12 @@ def main():
         lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
         checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
         print("Loading from checkpoint",checkpoint)
-        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
+        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay)
     else:
-        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr)
+        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=num_devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

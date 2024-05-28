@@ -73,22 +73,22 @@ def pytorch_neg_multi_log_likelihood_batch(gt, logits, confidences, avails):
 
 # Lightning Module
 class LightningModel(L.LightningModule):
-    def __init__(self, model_name, in_channels, time_limit, n_traj, lr=1.e-3, weight_decay=1.e-5):
+    def __init__(self, model_name, in_channels, time_limit, n_traj, lr, weight_decay):
         super().__init__()
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         self.lr = lr
         self.weight_decay = weight_decay
-        self.transforms = transf.Compose([
-            transf.RandomRotation(10),
-            transf.RandomResizedCrop(size=(IMG_RES, IMG_RES)),
-        ])
+        # self.transforms = transf.Compose([
+        #     transf.RandomRotation(10),
+        #     transf.RandomResizedCrop(size=(IMG_RES, IMG_RES)),
+        # ])
             
     
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
-        x = self.transforms(x)
+        #x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
