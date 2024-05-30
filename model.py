@@ -15,11 +15,28 @@ class Model(nn.Module):
 
         self.n_traj = n_traj
         self.time_limit = time_limit
-        self.model = timm.create_model(
+
+        self.n_hidden = 512
+        self.n_out = self.n_traj * 2 * self.time_limit + self.n_traj
+
+        self.backbone = timm.create_model(
             model_name,
             pretrained=True,
             in_chans=in_channels,
-            num_classes=self.n_traj * 2 * self.time_limit + self.n_traj,
+            num_classes=self.n_hidden,
+        )
+
+        self.head = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_hidden),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_out)
+        )
+
+        self.model = nn.Sequential(
+            self.backbone,
+            self.head
         )
 
 
@@ -81,7 +98,7 @@ class LightningModel(L.LightningModule):
         self.weight_decay = weight_decay
         # self.transforms = transf.Compose([
         #     transf.RandomRotation(10),
-        #     transf.RandomResizedCrop(size=(IMG_RES, IMG_RES)),
+        #     transf.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
         # ])
             
     
@@ -118,9 +135,9 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
-        # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=1)#cycle_momentum=False)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr, total_steps=1000)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
+        # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20)#cycle_momentum=False)
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr, total_steps=200)
 
         return [optimizer], [scheduler]
         #return optimizer
