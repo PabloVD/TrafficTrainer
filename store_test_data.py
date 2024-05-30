@@ -18,6 +18,7 @@ N_TRAJS = 6
 
 margin = 50
 dpi = 100
+ntrajs = 2
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -31,13 +32,25 @@ def parse_args():
 
     return args
 
-def init_figure(idx):
 
-    figure(figsize=(15, 15), dpi=dpi)
-    patch_id = idx
-    bboxarr = []
+def last_index(valid):
 
-    return patch_id, bboxarr
+    last_one_index = np.where(valid == 1)[0][-1]#len(valid) - 1 - valid[::-1].index(1)
+    #print(valid.shape,np.where(valid == 1).shape)
+
+    return last_one_index
+
+def interpolate_trajectories(traj, valid):
+
+    int_traj = traj.copy()
+    traj_val = int_traj[valid>0]
+
+    idxs = np.array(range(len(int_traj)))
+
+    int_traj[valid==0,0] = np.interp(idxs[valid==0], idxs[valid>0], traj_val[:,0])
+    int_traj[valid==0,1] = np.interp(idxs[valid==0], idxs[valid>0], traj_val[:,1])
+
+    return int_traj
 
 
 def main():
@@ -48,7 +61,7 @@ def main():
     model_name = args.model
     checkpoint = model_name+"-bestmodel.ckpt"
     print("Loading from checkpoint",checkpoint)
-    model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3).cuda().eval()
+    model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3, weight_decay=1.e-3).cuda().eval()
     
     loader = DataLoader(
         WaymoLoader(args.data, return_vector=True),
@@ -66,12 +79,13 @@ def main():
 
 
     with torch.no_grad():
-        for x, y, is_available, vector_data, center, shift, yaw, scenario, gt_all in tqdm(loader):
+        for x, y, is_available, vector_data, center, shift, yaw, scenario, gt_all, val_all in tqdm(loader):
             x, y, is_available = map(lambda x: x.cuda(), (x, y, is_available))
 
             center = np.array(center)[0]
 
             gt_all = gt_all[0]
+            val_all= val_all[0]
 
             for j in range(len(gt_all)):
                 gt_all[j] = gt_all[j] - center
@@ -91,35 +105,33 @@ def main():
 
                 os.system("mkdir "+folder)
 
+                gt_all = gt_all.cpu().numpy()
+                val_all = val_all.cpu().numpy()
+
+                for ag in range(len(gt_all)):
+
+                    gt_all[ag] = interpolate_trajectories(gt_all[ag], val_all[ag])
+
                 np.save(folder+"/gt_all",gt_all)
 
-                # if iii>0:
-            
-                #     bboxarr = np.array(bboxarr)
-                #     plt.xlim(bboxarr[:,0].min()-margin, bboxarr[:,1].max()+margin)
-                #     plt.ylim(bboxarr[:,2].min()-margin, bboxarr[:,3].max()+margin)
-                #     plt.savefig(os.path.join(args.save, f"{iii:0>2}.png"))
-                #     plt.close()
-            
-                # figure(figsize=(15, 15), dpi=dpi)
-                bboxarr = []
                 scenario_id=scenario
             
                 for i in np.unique(idx):
                     _X = X[idx == i]
                     np.save(folder+"/asset_"+str(int(i)),_X)
                     
-                    # if _X[:, 5:12].sum() > 0:                        
-                    #     plt.plot(_X[:, 0], _X[:, 1], linewidth=4, color="red")
-                    # else:
-                    #     plt.plot(_X[:, 0], _X[:, 1], color="black", alpha=0.2)
 
-                
-            
             y = y.squeeze(0).cpu().numpy()
             is_available = is_available.squeeze(0).long().cpu().numpy()
 
-            gt = y[is_available > 0]
+            last_idx = last_index(is_available)
+            is_available = is_available[:last_idx+1]
+            y = y[:last_idx+1]
+
+            #print(remove_last_zeros(is_available))
+
+            # gt = y[is_available > 0]
+            gt = interpolate_trajectories(y, is_available)
 
             yaw = yaw.item()
             rot_matrix = np.array(
@@ -131,45 +143,38 @@ def main():
             shift = np.array(shift)[0]
 
             gt = gt@rot_matrix + shift
-
             gt = gt - center
-            #plt.plot(gt[::10, 0],gt[::10, 1],"-o",color="blue")
 
             # gt2 = yy.squeeze(0).cpu().numpy()[is_available > 0]
             # gt2 = gt2 - center
-            # plt.plot(gt2[::10, 0],gt2[::10, 1],"-o",color="green")
 
-            bbox = [gt[:,0].min(0), gt[:,0].max(0), gt[:,1].min(0), gt[:,1].max(0)]
-            bboxarr.append(bbox)
+            np.save(folder+"/agent_true_"+str(iii),gt)
 
             # Model
 
             confidences_logits, logits = model(x)
 
-            argmax = confidences_logits.argmax()
-            if args.use_top1:
-                confidences_logits = confidences_logits[:, argmax].unsqueeze(1)
-                logits = logits[:, argmax].unsqueeze(1)
-
-            # loss = pytorch_neg_multi_log_likelihood_batch(
-            #     y, logits, confidences_logits, is_available
-            # )
             confidences = torch.softmax(confidences_logits, dim=1)
 
             logits = logits.squeeze(0).cpu().numpy()
             confidences = confidences.squeeze(0).cpu().numpy()
 
-            pred = logits[confidences.argmax()][is_available > 0]
-            pred = pred@rot_matrix + shift 
-            pred = pred - center
+            for traj in range(ntrajs):
+            
+                indmax = confidences.argmax()
 
-            #plt.plot(pred[::10, 0],pred[::10, 1],"-o",color="green",label="pred top 1")
+                pred = logits[confidences.argmax()][:last_idx+1]#[is_available > 0]
+                pred = pred@rot_matrix + shift 
+                pred = pred - center
 
-            np.save(folder+"/agent_pred_"+str(iii),pred)
-            np.save(folder+"/agent_true_"+str(iii),gt)
+                np.save(folder+"/agent_pred_"+str(iii)+"_traj_"+str(traj),pred)
+
+                confidences = np.delete(confidences, indmax)
+                logits = np.delete(logits, indmax, axis=0)
             
 
             iii += 1
+            
             
 
             

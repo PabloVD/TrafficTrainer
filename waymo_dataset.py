@@ -47,6 +47,6 @@ class WaymoLoader(Dataset):
         is_available = data["future_val_marginal"]
 
         if self.return_vector:
-            return raster, trajectory, is_available, data["vector_data"], data["center"], data["shift"], data["yaw"], str(data["scenario_id"]), data["gt_all"]
+            return raster, trajectory, is_available, data["vector_data"], data["center"], data["shift"], data["yaw"], str(data["scenario_id"]), data["gt_all"], data["val_all"]
 
         return raster, trajectory, is_available

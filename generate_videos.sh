@@ -5,7 +5,7 @@ python3 store_test_data.py \
 	--data /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered	\
 	--use-top1 \
 	--save ./viz \
-	--n-samples 2
+	--n-samples 20
 
 rm -r frames/*
 rm -r videos/*
