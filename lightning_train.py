@@ -51,7 +51,6 @@ def parse_args():
     )
 
     parser.add_argument(
-        #"--model", type=str, required=False, default="xception71", help="CNN model name"
         "--model", type=str, required=False, default="resnet18", help="CNN model name"
     )
     parser.add_argument("--lr", type=float, required=False, default=1e-3)
@@ -67,6 +66,12 @@ def parse_args():
     )
     parser.add_argument(
         "--num-devices", type=int, required=False, help="Number of devices used for training", default=1
+    )
+    parser.add_argument(
+        "--scheduler", type=str, required=False, default="multistep", help="Scheduler used for vary the learning rate"
+    )
+    parser.add_argument(
+        "--wd", type=float, required=False, default=1.e-5, help="Weight decay"
     )
 
     args = parser.parse_args()
@@ -91,7 +96,8 @@ def main():
     time_limit = args.time_limit
     n_traj = args.n_traj
     lr = args.lr
-    weight_decay = 1.e-5
+    sched = args.scheduler
+    weight_decay = args.wd
 
     # Training parameters
     n_epochs = args.n_epochs
@@ -133,9 +139,9 @@ def main():
         lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
         checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
         print("Loading from checkpoint",checkpoint)
-        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay)
+        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay, sched=sched)
     else:
-        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay)
+        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay, sched=sched)
 
     print("Initializing trainer")
     trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)

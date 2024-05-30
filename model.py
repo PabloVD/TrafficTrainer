@@ -51,6 +51,7 @@ class Model(nn.Module):
 
         return confidences_logits, logits
 
+
 # Loss function
 def pytorch_neg_multi_log_likelihood_batch(gt, logits, confidences, avails):
     """
@@ -87,15 +88,16 @@ def pytorch_neg_multi_log_likelihood_batch(gt, logits, confidences, avails):
     return torch.mean(error)
 
 
-
 # Lightning Module
 class LightningModel(L.LightningModule):
-    def __init__(self, model_name, in_channels, time_limit, n_traj, lr, weight_decay):
+    def __init__(self, model_name, in_channels, time_limit, n_traj, lr, weight_decay, sched):
         super().__init__()
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         self.lr = lr
         self.weight_decay = weight_decay
+        self.sched = sched
+        
         # self.transforms = transf.Compose([
         #     transf.RandomRotation(10),
         #     transf.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
@@ -135,12 +137,17 @@ class LightningModel(L.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
-        # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20)#cycle_momentum=False)
-        # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr, total_steps=200)
+        if self.sched=="multistep":
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
+        elif self.sched=="cyclic":
+            scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20,cycle_momentum=False)
+        elif self.sched=="onecycle":
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr, total_steps=200)
+        else:
+            return optimizer
 
         return [optimizer], [scheduler]
-        #return optimizer
+        
 
     def forward(self, x):
 
