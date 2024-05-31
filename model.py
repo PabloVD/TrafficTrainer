@@ -16,7 +16,7 @@ class Model(nn.Module):
         self.n_traj = n_traj
         self.time_limit = time_limit
 
-        self.n_hidden = 512
+        self.n_hidden = 2**11
         self.n_out = self.n_traj * 2 * self.time_limit + self.n_traj
 
         self.backbone = timm.create_model(
@@ -143,6 +143,8 @@ class LightningModel(L.LightningModule):
             scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20,cycle_momentum=False)
         elif self.sched=="onecycle":
             scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=self.lr, total_steps=200)
+        elif self.sched=="cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,T_0=20,eta_min=max(1e-2*self.lr, 1e-6))
         else:
             return optimizer
 
