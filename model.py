@@ -23,21 +23,22 @@ class Model(nn.Module):
             model_name,
             pretrained=True,
             in_chans=in_channels,
-            num_classes=self.n_hidden,
+            num_classes=self.n_out,
         )
 
-        self.head = nn.Sequential(
-            nn.Dropout(0.5),
-            nn.Linear(self.n_hidden, self.n_hidden),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(self.n_hidden, self.n_out)
-        )
+        # self.head = nn.Sequential(
+        #     nn.Dropout(0.5),
+        #     nn.Linear(self.n_hidden, self.n_hidden),
+        #     nn.ReLU(),
+        #     nn.Dropout(0.5),
+        #     nn.Linear(self.n_hidden, self.n_out)
+        # )
 
-        self.model = nn.Sequential(
-            self.backbone,
-            self.head
-        )
+        # self.model = nn.Sequential(
+        #     self.backbone,
+        #     self.head
+        # )
+        self.model = self.backbone
 
 
     def forward(self, x):
@@ -138,7 +139,7 @@ class LightningModel(L.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         if self.sched=="multistep":
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.5)
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(25, 100, 25)), gamma=0.1)
         elif self.sched=="cyclic":
             scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20,cycle_momentum=False)
         elif self.sched=="onecycle":
