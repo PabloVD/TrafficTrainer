@@ -183,6 +183,8 @@ N_ROADS = 21
 road_colors = [int(x) for x in np.linspace(1, MAX_PIXEL_VALUE, N_ROADS).astype("uint8")]
 idx2type = ["unset", "vehicle", "pedestrian", "cyclist", "other"]
 
+state_to_color = {1:"red",4:"red",7:"red",2:"yellow",5:"yellow",8:"yellow",3:"green",6:"green"}
+color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -238,6 +240,12 @@ def rasterize(
     tl_states,
     tl_ids,
     tl_valids,
+    tl_past_states,
+    tl_past_valid,
+    tl_current_x,
+    tl_current_y,
+    tl_past_x,
+    tl_past_y,
     future_x,
     future_y,
     future_valid,
@@ -282,6 +290,8 @@ def rasterize(
     YAWS = np.concatenate((past_yaw, current_yaw), axis=1)
 
     agents_valid = np.concatenate((past_valid, current_valid), axis=1)
+
+    TL_current = np.transpose(np.concatenate((tl_current_x,tl_current_y),axis=0))
 
     roadlines_valid = roadlines_valid.reshape(-1)
     roadlines_coords = (
@@ -468,6 +478,35 @@ def rasterize(
         # Apply only to vehicles
         if self_type!=1:
             continue
+
+        # pab
+        TL_current = TL_current*shift*magic_const*raster_size/crop_size
+        TL_current = (TL_current - center_xy) @ rot_matrix + displacement
+
+        tl_valids = tl_valids.reshape(-1)
+        tl_states = tl_states.reshape(-1)
+
+        # Show traffic lights
+        for j, tl in enumerate(tl_states):
+            if tl_valids[j]<=0 or tl==0:
+                continue
+
+            # print("he")
+            # print(tl)
+            # print(state_to_color[tl])
+            # print(color_to_rgb[state_to_color[tl]])
+
+            col_tl = color_to_rgb[state_to_color[tl]]
+            #print(col_tl, type(col_tl))
+
+            print(roadline.astype(int).mean(0), TL_current[j].astype(np.int32))
+                
+            RES_ROADMAP = cv2.circle(
+                RES_ROADMAP,
+                tuple(TL_current[j].astype(np.int32)),
+                radius=50,
+                color=col_tl
+            )
 
         raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)
 
@@ -778,6 +817,12 @@ def merge(
         parsed["traffic_light_state/current/state"].numpy(),
         parsed["traffic_light_state/current/id"].numpy(),
         parsed["traffic_light_state/current/valid"].numpy(),
+        parsed["traffic_light_state/past/state"].numpy(),
+        parsed["traffic_light_state/past/valid"].numpy(),
+        parsed["traffic_light_state/current/x"].numpy(),
+        parsed["traffic_light_state/current/y"].numpy(),
+        parsed["traffic_light_state/past/x"].numpy(),
+        parsed["traffic_light_state/past/y"].numpy(),
         parsed["state/future/x"].numpy(),
         parsed["state/future/y"].numpy(),
         parsed["state/future/valid"].numpy(),
@@ -816,6 +861,14 @@ def merge(
             parsed["state/future/valid"].numpy(),
             validate=validate,
         )
+
+    # print("lifgts")
+    # print(parsed["traffic_light_state/current/valid"].numpy()[0,0],parsed["traffic_light_state/past/valid"].numpy()[0,0],parsed["traffic_light_state/past/valid"].numpy()[-1,0])
+    # print(parsed["traffic_light_state/current/x"].numpy()[0,0]==parsed["traffic_light_state/past/x"].numpy()[0,0]==parsed["traffic_light_state/past/x"].numpy()[-1,0])
+    # #print(parsed["traffic_light_state/current/x"].numpy()[0,0]==parsed["traffic_light_state/past/x"].numpy()[0,0])#,parsed["traffic_light_state/past/x"].numpy()[0,-1])
+    # if parsed["traffic_light_state/current/valid"][0,0]==parsed["traffic_light_state/past/valid"][0,0]==parsed["traffic_light_state/past/valid"][-1,0]==1:
+    #     print(parsed["traffic_light_state/current/state"].numpy()[0,0]==parsed["traffic_light_state/past/state"].numpy()[0,0]==parsed["traffic_light_state/past/state"].numpy()[-1,0])
+
 
     for i in range(len(raster_data)):
         if use_vectorize:

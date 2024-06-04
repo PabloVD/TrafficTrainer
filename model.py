@@ -19,7 +19,7 @@ class Model(nn.Module):
         self.n_hidden = 2**11
         self.n_out = self.n_traj * 2 * self.time_limit + self.n_traj
 
-        self.backbone = timm.create_model(
+        self.model = timm.create_model(
             model_name,
             pretrained=True,
             in_chans=in_channels,
@@ -38,7 +38,6 @@ class Model(nn.Module):
         #     self.backbone,
         #     self.head
         # )
-        self.model = self.backbone
 
 
     def forward(self, x):
@@ -99,16 +98,16 @@ class LightningModel(L.LightningModule):
         self.weight_decay = weight_decay
         self.sched = sched
         
-        # self.transforms = transf.Compose([
-        #     transf.RandomRotation(10),
-        #     transf.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
-        # ])
+        self.transforms = transf.Compose([
+            transf.RandomRotation(10),
+            transf.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
+        ])
             
     
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
-        #x = self.transforms(x)
+        x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
@@ -139,7 +138,7 @@ class LightningModel(L.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         if self.sched=="multistep":
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(25, 100, 25)), gamma=0.1)
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(15, 100, 15)), gamma=0.1)
         elif self.sched=="cyclic":
             scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20,cycle_momentum=False)
         elif self.sched=="onecycle":
