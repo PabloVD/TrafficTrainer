@@ -2,6 +2,11 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 
+# fixed_frame = True
+# use_rgb = False
+fixed_frame = False
+use_rgb = True
+
 class WaymoLoader(Dataset):
     def __init__(self, directory, limit=0, return_vector=False, is_test=False):
         files = os.listdir(directory)
@@ -24,7 +29,12 @@ class WaymoLoader(Dataset):
         data = np.load(filename, allow_pickle=True)
 
         raster = data["raster"].astype("float32")
-        raster = raster.transpose(2, 1, 0) / 255
+        
+        if use_rgb and not fixed_frame:
+            raster = raster.transpose(0, 3, 2, 1) / 255
+            raster = raster.reshape(-1, raster.shape[-2], raster.shape[-1])
+        else:
+            raster = raster.transpose(2, 1, 0) / 255
 
         if self.is_test:
             center = data["shift"]

@@ -102,8 +102,9 @@ def main():
     # Training parameters
     n_epochs = args.n_epochs
     save_path = args.save_path
-    # devices = args.num_devices
+    #devices = args.num_devices
     devices = [0,1,2,3]
+    # devices = [4,5,6,7]
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')
