@@ -5,12 +5,12 @@ import glob
 from tqdm import tqdm
 import os
 
-fixed_frame = True
+#fixed_frame = True
 fixed_frame = False
+#use_rgb = False
 use_rgb = True
 
 filenames = sorted(glob.glob("/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered/vehicle_*"))
-#filenames = [filenames[0]]
 filenames = filenames[:100]
 outpath = "/home/tda/CARLA/TrafficGeneration/vis_tests/"
 
@@ -32,7 +32,7 @@ for j, filename in enumerate(tqdm(filenames)):
     for i in range(11):
 
         if fixed_frame:
-            rast = raster[0:3].transpose(2, 1, 0).mean(-1)
+            rast = raster[0:3].transpose(1, 2, 0).mean(-1)
             rast += raster[3+i]/2. + raster[3+11+i]  
         else:
             rast = raster[i]

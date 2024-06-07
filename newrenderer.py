@@ -8,8 +8,9 @@ import tensorflow as tf
 from tqdm import tqdm
 from feature_descriptor import features_description
 
-fixed_frame = True
+#fixed_frame = True
 fixed_frame = False
+#use_rgb = False
 use_rgb = True
 
 MAX_PIXEL_VALUE = 255
