@@ -4,9 +4,10 @@ import timm
 import torch
 from torch import optim, nn
 import lightning as L
-import torchvision.transforms as transf
+import torchvision.transforms as transforms
 
 IMG_RES = 224
+center_ego = [IMG_RES//4, IMG_RES//2]
 
 # CNN model
 class Model(nn.Module):
@@ -99,15 +100,23 @@ class LightningModel(L.LightningModule):
         self.sched = sched
         self.time_limit = time_limit
         
-        self.transforms = transf.Compose([
-            transf.RandomRotation(10),
-            transf.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
+        self.transforms = transforms.Compose([
+            transforms.RandomRotation(10),
+            transforms.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
         ])
+        self.ego_rotator = transforms.RandomRotation(20, center=(center_ego[0],center_ego[1]))
+
+    def ego_transform(self, x):
+
+         ego = x[:,3:3+11]
+         x[:,3:3+11] = self.ego_rotator(ego)
+
+         return x
             
-    
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
+        x = self.ego_transform(x)
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
         x = self.transforms(x)
