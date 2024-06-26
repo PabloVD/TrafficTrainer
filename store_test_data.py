@@ -20,6 +20,8 @@ margin = 50
 dpi = 100
 ntrajs = 2
 
+sched="multistep"
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True)
@@ -60,9 +62,16 @@ def main():
 
     model_name = args.model
     checkpoint = model_name+"-bestmodel.ckpt"
+    #checkpoint = "moving-resnet18-epoch=38-val_loss=331.50.ckpt"
     print("Loading from checkpoint",checkpoint)
-    model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3, weight_decay=1.e-3).cuda().eval()
+    #model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3, weight_decay=0., sched=sched).cuda().eval()
+    model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=IN_CHANNELS, time_limit=TL, n_traj=N_TRAJS, lr=1.e-3, weight_decay=0., sched=sched).cuda().eval()
     
+    script = model.to_torchscript()
+
+    # save for use in production environment
+    torch.jit.save(script, "model.pt")
+
     loader = DataLoader(
         WaymoLoader(args.data, return_vector=True),
         batch_size=1,

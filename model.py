@@ -97,6 +97,7 @@ class LightningModel(L.LightningModule):
         self.lr = lr
         self.weight_decay = weight_decay
         self.sched = sched
+        self.time_limit = time_limit
         
         self.transforms = transf.Compose([
             transf.RandomRotation(10),
@@ -107,6 +108,8 @@ class LightningModel(L.LightningModule):
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
+        y = y[:,:self.time_limit]
+        is_available = is_available[:,:self.time_limit]
         x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
@@ -119,6 +122,8 @@ class LightningModel(L.LightningModule):
     def validation_step(self, batch, batch_idx):
 
         x, y, is_available = batch
+        y = y[:,:self.time_limit]
+        is_available = is_available[:,:self.time_limit]
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
         self.log("val_loss", loss)

@@ -2,10 +2,8 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 
-#fixed_frame = True
-fixed_frame = False
-#use_rgb = False
-use_rgb = True
+fixed_frame = True
+#fixed_frame = False
 
 class WaymoLoader(Dataset):
     def __init__(self, directory, limit=0, return_vector=False, is_test=False):
@@ -30,7 +28,7 @@ class WaymoLoader(Dataset):
 
         raster = data["raster"].astype("float32")
         
-        if use_rgb and not fixed_frame:
+        if not fixed_frame:
             raster = raster.transpose(0, 3, 1, 2) / 255
             raster = raster.reshape(-1, raster.shape[-2], raster.shape[-1])
         else:

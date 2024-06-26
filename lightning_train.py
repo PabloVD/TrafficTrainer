@@ -71,7 +71,7 @@ def parse_args():
         "--scheduler", type=str, required=False, default="multistep", help="Scheduler used for vary the learning rate"
     )
     parser.add_argument(
-        "--wd", type=float, required=False, default=1.e-5, help="Weight decay"
+        "--wd", type=float, required=False, default=0., help="Weight decay"
     )
 
     args = parser.parse_args()
@@ -105,6 +105,7 @@ def main():
     #devices = args.num_devices
     devices = [0,1,2,3]
     # devices = [4,5,6,7]
+    devices = 1
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')

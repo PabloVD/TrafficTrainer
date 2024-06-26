@@ -8,20 +8,24 @@ import tensorflow as tf
 from tqdm import tqdm
 from feature_descriptor import features_description
 
-#fixed_frame = True
-fixed_frame = False
-#use_rgb = False
-use_rgb = True
+fixed_frame = True
+# fixed_frame = False
 
 MAX_PIXEL_VALUE = 255
 N_ROADS = 21
 road_colors = [int(x) for x in np.linspace(1, MAX_PIXEL_VALUE, N_ROADS).astype("uint8")]
 idx2type = ["unset", "vehicle", "pedestrian", "cyclist", "other"]
 
+# Unknown = 0, Arrow_Stop = 1, Arrow_Caution = 2, Arrow_Go = 3, Stop = 4,
+# Caution = 5, Go = 6, Flashing_Stop = 7, Flashing_Caution = 8
 state_to_color = {1:"red",4:"red",7:"red",2:"yellow",5:"yellow",8:"yellow",3:"green",6:"green"}
 color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 
 egocol = {1:(0,128,0),0:(0,0,255)}
+
+raster_size=224
+zoom_fact=1.3
+n_channels=11
 
 def draw_roads(roadmap, centered_roadlines, roadlines_ids, roadlines_types, tl_dict):
 
@@ -31,10 +35,11 @@ def draw_roads(roadmap, centered_roadlines, roadlines_ids, roadlines_types, tl_d
             roadline = centered_roadlines[roadlines_ids == road_id]
             road_type = roadlines_types[roadlines_ids == road_id].flatten()[0]
 
-            road_color = road_colors[road_type]
-            for col in color_to_rgb.keys():
-                if road_id in tl_dict[col]:
-                    road_color = color_to_rgb[col]
+            # road_color = road_colors[road_type]
+            # for col in color_to_rgb.keys():
+            #     if road_id in tl_dict[col]:
+            #         road_color = color_to_rgb[col]
+            road_color = 0
 
             roadmap = cv2.polylines(
                 roadmap,
@@ -44,6 +49,19 @@ def draw_roads(roadmap, centered_roadlines, roadlines_ids, roadlines_types, tl_d
             )
 
     return roadmap
+
+def get_tl_dict(tl_states, tl_ids, tl_valids):
+
+    tl_dict = {"green": set(), "yellow": set(), "red": set()}
+
+    # Unknown = 0, Arrow_Stop = 1, Arrow_Caution = 2, Arrow_Go = 3, Stop = 4,
+    # Caution = 5, Go = 6, Flashing_Stop = 7, Flashing_Caution = 8
+    for tl_state, tl_id, tl_valid in zip(tl_states.flatten(), tl_ids.flatten(), tl_valids.flatten()):
+        if tl_valid == 0 or tl_state==0:
+            continue
+        tl_dict[state_to_color[tl_state]].add(tl_id)
+
+    return tl_dict
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -79,10 +97,6 @@ def parse_arguments():
 
 
 def rasterize(parsed, validate):
-    
-    raster_size=224
-    zoom_fact=3
-    n_channels=11
     
     # Agents
     tracks_to_predict=parsed["state/tracks_to_predict"].numpy()
@@ -122,25 +136,9 @@ def rasterize(parsed, validate):
     # Scenario
     scenario_id=parsed["scenario/id"].numpy()[0].decode("utf-8")
 
-    
     # Prepare arrays
     GRES = []
-    displacement = np.array([[raster_size // 2, raster_size // 2]])
-    tl_dict = {"green": set(), "yellow": set(), "red": set()}
-
-    # Unknown = 0, Arrow_Stop = 1, Arrow_Caution = 2, Arrow_Go = 3, Stop = 4,
-    # Caution = 5, Go = 6, Flashing_Stop = 7, Flashing_Caution = 8
-    for tl_state, tl_id, tl_valid in zip(
-        tl_states.flatten(), tl_ids.flatten(), tl_valids.flatten()
-    ):
-        if tl_valid == 0:
-            continue
-        if tl_state in [1, 4, 7]:
-            tl_dict["red"].add(tl_id)
-        if tl_state in [2, 5, 8]:
-            tl_dict["yellow"].add(tl_id)
-        if tl_state in [3, 6]:
-            tl_dict["green"].add(tl_id)
+    displacement = np.array([[raster_size // 4, raster_size // 2]])
 
     XY = np.concatenate(
         (
@@ -158,15 +156,18 @@ def rasterize(parsed, validate):
 
     agents_valid = np.concatenate((past_valid, current_valid), axis=1)
 
-    TL_current = np.transpose(np.concatenate((tl_current_x,tl_current_y),axis=0))
-    tl_past_x, tl_current_x, tl_past_y, tl_current_y = np.transpose(tl_past_x), np.transpose(tl_current_x), np.transpose(tl_past_y), np.transpose(tl_current_y)
-    TL_XY = np.concatenate(
-        (
-            np.expand_dims(np.concatenate((tl_past_x, tl_current_x), axis=1), axis=-1),
-            np.expand_dims(np.concatenate((tl_past_y, tl_current_y), axis=1), axis=-1),
-        ),
-        axis=-1,
-    )
+    # TL_current = np.transpose(np.concatenate((tl_current_x,tl_current_y),axis=0))
+    # tl_past_x, tl_current_x, tl_past_y, tl_current_y = np.transpose(tl_past_x), np.transpose(tl_current_x), np.transpose(tl_past_y), np.transpose(tl_current_y)
+    # TL_XY = np.concatenate(
+    #     (
+    #         np.expand_dims(np.concatenate((tl_past_x, tl_current_x), axis=1), axis=-1),
+    #         np.expand_dims(np.concatenate((tl_past_y, tl_current_y), axis=1), axis=-1),
+    #     ),
+    #     axis=-1,
+    # )
+
+    tl_states_hist = np.concatenate((tl_past_states,tl_states),axis=0).T
+    tl_valid_hist = np.concatenate((tl_past_valid,tl_valids),axis=0).T
 
     # Prepare roads
     roadlines_valid = roadlines_valid.reshape(-1)
@@ -176,11 +177,11 @@ def rasterize(parsed, validate):
     roadlines_ids = roadlines_ids.reshape(-1)[roadlines_valid > 0]
 
     # Center in map, useful for offline rendering
-    mapcenter = roadlines_coords.mean(0)
-    roadlines_coords = roadlines_coords - mapcenter
-    XY = XY - mapcenter
-    GT_XY = GT_XY - mapcenter
-    TL_XY = TL_XY - mapcenter
+    # mapcenter = roadlines_coords.mean(0)
+    # roadlines_coords = roadlines_coords - mapcenter
+    # XY = XY - mapcenter
+    # GT_XY = GT_XY - mapcenter
+    # TL_XY = TL_XY - mapcenter
 
     roadlines_coords = roadlines_coords*zoom_fact
 
@@ -260,16 +261,17 @@ def rasterize(parsed, validate):
         #         color=col_tl,
         #         thickness=-1
         #     )
-        
+
 
         if fixed_frame:
 
             unscaled_center_xy = xy_val[-1].reshape(1, -1)
             center_xy = unscaled_center_xy*zoom_fact
+            yawt = yawvec[-1]
             rot_matrix = np.array(
                 [
-                    [np.cos(yaw), -np.sin(yaw)],
-                    [np.sin(yaw), np.cos(yaw)],
+                    [np.cos(yawt), -np.sin(yawt)],
+                    [np.sin(yawt), np.cos(yawt)],
                 ]
             )
 
@@ -277,6 +279,8 @@ def rasterize(parsed, validate):
             centered_others = (XY.reshape(-1, 2)*zoom_fact - center_xy) @ rot_matrix + displacement
             centered_others = centered_others.reshape(128, n_channels, 2)
             centered_gt = (gt_xy - unscaled_center_xy) @ rot_matrix
+
+            tl_dict = get_tl_dict(tl_states_hist[:,-1], tl_ids, tl_valid_hist[:,-1])
 
             RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines, roadlines_ids, roadlines_types, tl_dict)
 
@@ -289,7 +293,7 @@ def rasterize(parsed, validate):
 
                 unscaled_center_xy = xy_val[timestamp].reshape(1, -1)
                 center_xy = unscaled_center_xy*zoom_fact
-                yawt = yawvec[timestamp]#YAWS[ind,timestamp]
+                yawt = yawvec[timestamp]
                 rot_matrix = np.array(
                     [
                         [np.cos(yawt), -np.sin(yawt)],
@@ -301,6 +305,8 @@ def rasterize(parsed, validate):
                 centered_others = XY
                 centered_gt = (gt_xy - unscaled_center_xy) @ rot_matrix
 
+                tl_dict = get_tl_dict(tl_states_hist[:,timestamp], tl_ids, tl_valid_hist[:,timestamp])
+
                 RES_ROADSTIME[timestamp] = draw_roads(RES_ROADSTIME[timestamp], centered_roadlines, roadlines_ids, roadlines_types, tl_dict)
 
         # Agents
@@ -309,7 +315,6 @@ def rasterize(parsed, validate):
 
         is_ego = False
         self_type = 0
-        _tmp = 0
         for other_agent_id in unique_agent_ids:
             other_agent_id = int(other_agent_id)
             if other_agent_id < 1:
@@ -320,7 +325,6 @@ def rasterize(parsed, validate):
             else:
                 is_ego = False
 
-            _tmp += 1
             agent_lane = centered_others[agents_ids == other_agent_id][0]
             agent_valid = agents_valid[agents_ids == other_agent_id]
             agent_yaw = YAWS[agents_ids == other_agent_id]
@@ -379,7 +383,12 @@ def rasterize(parsed, validate):
                 box_points = box_points + _coord
                 box_points = box_points.reshape(1, -1, 2).astype(np.int32)
 
-                if not fixed_frame and use_rgb:
+                #if is_ego: print(timestamp, box_points)
+                #print(box_points.shape)
+                #if is_ego: print(timestamp, agent_l, agent_w)
+
+                #if not fixed_frame and use_rgb:
+                if not fixed_frame:
                     RES_ROADSTIME[timestamp] = cv2.fillPoly(
                             RES_ROADSTIME[timestamp],
                             box_points,
@@ -403,14 +412,16 @@ def rasterize(parsed, validate):
             raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)
         else:
             timarray = np.array(RES_ROADSTIME)
+
+            raster = timarray
             
-            if use_rgb:
-                raster = timarray
-            else:   
-                egoarray, otherarray = np.array(RES_EGO), np.array(RES_OTHER)
-                roads_onechannel = timarray.mean(axis=-1)#,keepdims=True)
-                raster = roads_onechannel + egoarray.squeeze()/2. + otherarray.squeeze()
-                raster = raster.transpose(1, 2, 0)
+            # if use_rgb:
+            #     raster = timarray
+            # else:   
+            #     egoarray, otherarray = np.array(RES_EGO), np.array(RES_OTHER)
+            #     roads_onechannel = timarray.mean(axis=-1)#,keepdims=True)
+            #     raster = roads_onechannel + egoarray.squeeze()/2. + otherarray.squeeze()
+            #     raster = raster.transpose(1, 2, 0)
 
         raster_dict = {
             "object_id": agent_id,

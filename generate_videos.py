@@ -89,9 +89,6 @@ def main():
         agents_true = [np.load(file) for file in trues]
         agents_pred1 = [np.load(file) for file in preds1]
         agents_pred2 = [np.load(file) for file in preds2]
-
-        # print(len(agents_true))
-        # print(agents_true[0].shape)
         
         bboxarr = np.array([[ag[:,0].min(), ag[:,0].max(), ag[:,1].min(), ag[:,1].max()] for ag in agents_true])
 
@@ -100,14 +97,18 @@ def main():
 
         gt_all = gt_all[:,:max_frames]
 
-        # ground truth agents tot rack are also in the ground truth array of all agents, find those which are the same to not repeat them
-        repeated_agents = find_similar_arrays(agents_true, gt_all)
-        repeated_agents = np.array(repeated_agents)[:,1]
-
         #print("Num agents:",len(gt_all), len(agents_true))
         if len(agents_true)<3:
             #print("Few agents, continue")
             continue
+
+        # ground truth agents to track are also in the ground truth array of all agents, find those which are the same to not repeat them
+        repeated_agents = find_similar_arrays(agents_true, gt_all)
+        repeated_agents = np.array(repeated_agents)[:,1]
+        # try:
+        #     repeated_agents = np.array(repeated_agents)[:,1]
+        # except:
+        #     pass
         
         for t in range(max_frames):
       
