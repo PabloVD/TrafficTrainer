@@ -104,21 +104,63 @@ class LightningModel(L.LightningModule):
             transforms.RandomRotation(10),
             transforms.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
         ])
-        self.ego_rotator = transforms.RandomRotation(20, center=(center_ego[0],center_ego[1]))
+
+        self.noise_pos_std = 2.
+        self.noise_ang_std = 10.
+        self.noise_ang_std2 = 30.
+        self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
+
+    
+    def ego_loc(self, img):
+
+        tmp = img.reshape(img.shape[0],img.shape[1],-1)
+        indices = torch.argmax(tmp,dim=-1)
+        row = indices // IMG_RES
+        column = indices - IMG_RES*row
+
+        locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
+
+        return locs
 
     def ego_transform(self, x):
 
-         ego = x[:,3:3+11]
-         x[:,3:3+11] = self.ego_rotator(ego)
+        ego = x[:,3:3+11]
 
-         return x
+        timeframes = ego.shape[1]
+
+        noise_pos = self.noise_pos_std*torch.randn((timeframes,2))
+        noise_pos = torch.cumsum(noise_pos, dim=1)
+        noise_pos = torch.flip(noise_pos,dims=(0,))
+
+        noise_ang = self.noise_ang_std*torch.randn((timeframes))
+        noise_ang = torch.cumsum(noise_ang, dim=0)
+        noise_ang = torch.flip(noise_ang,dims=(0,))
+
+        # Random rotation around end position of the ego vehicle
+        ego = self.ego_rotator(ego)
+
+        locs = self.ego_loc(ego)
+
+        for i in range(timeframes):
+            for b in range(ego.shape[0]):
+                
+                translation = [noise_pos[i,0],noise_pos[i,1]]
+                center_rot = (locs[b,i,1], locs[b,i,0])
+                angle = noise_ang[i].item()
+
+                # Random translation and rotation around vehicle
+                ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
+            
+        x[:,3:3+11] = ego
+
+        return x
             
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
-        x = self.ego_transform(x)
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
+        x = self.ego_transform(x)
         x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
