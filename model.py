@@ -177,16 +177,18 @@ class LightningModel(L.LightningModule):
         is_available = is_available[:,:self.time_limit]
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, sync_dist=True)
 
         return loss
     
     def test_step(self, batch, batch_idx):
 
         x, y, is_available = batch
+        y = y[:,:self.time_limit]
+        is_available = is_available[:,:self.time_limit]
         confidences_logits, logits = self.model(x)
         loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
-        self.log("test_loss", loss)
+        self.log("test_loss", loss, sync_dist=True)
 
         return loss
 
