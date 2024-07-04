@@ -491,15 +491,7 @@ def rasterize(
             if tl_valids[j]<=0 or tl==0:
                 continue
 
-            # print("he")
-            # print(tl)
-            # print(state_to_color[tl])
-            # print(color_to_rgb[state_to_color[tl]])
-
             col_tl = color_to_rgb[state_to_color[tl]]
-            #print(col_tl, type(col_tl))
-
-            print(roadline.astype(int).mean(0), TL_current[j].astype(np.int32))
                 
             RES_ROADMAP = cv2.circle(
                 RES_ROADMAP,
