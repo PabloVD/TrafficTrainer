@@ -43,12 +43,14 @@ class Model(nn.Module):
 
 
     def forward(self, x):
+
         outputs = self.model(x)
 
         confidences_logits, logits = (
             outputs[:, : self.n_traj],
             outputs[:, self.n_traj :],
         )
+
         logits = logits.view(-1, self.n_traj, self.time_limit, 2)
 
         return confidences_logits, logits
@@ -56,81 +58,97 @@ class Model(nn.Module):
 
 # Lightning Module
 class LightningModel(L.LightningModule):
-    def __init__(self, model_name, in_channels, time_limit, n_traj, lr, weight_decay, sched):
+    def __init__(self, hparams):
         super().__init__()
+
+        model_name = hparams["model_name"]
+        in_channels = hparams["in_channels"]
+        time_limit = hparams["time_limit"]
+        n_traj = hparams["n_traj"]
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         
-        self.lr = lr
-        self.weight_decay = weight_decay
-        self.sched = sched
-        self.time_limit = time_limit
+        self.lr = hparams["lr"]
+        self.weight_decay = hparams["weight_decay"]
+        self.sched = hparams["scheduler"]
+        self.time_limit = hparams["time_limit"]
+        self.loss_type = hparams["loss"]
         
         self.transforms = transforms.Compose([
             transforms.RandomRotation(10),
             transforms.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
         ])
 
-        #self.loss = NLL_loss()
-        self.loss = L2_loss()
-        #self.loss = L1_loss()
+        if self.loss_type=="NLL":
+            self.loss = NLL_loss()
+        elif self.loss_type=="L2":
+            self.loss = L2_loss()
+        elif self.loss_type=="L1":
+            self.loss = L1_loss()
+        else:
+            print("Loss not valid")
 
-        self.noise_pos_std = 1#2.
-        self.noise_ang_std = 5#10.
-        self.noise_ang_std2 = 10#30.
-        self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
+        # self.noise_pos_std = 1#2.
+        # self.noise_ang_std = 5#10.
+        # self.noise_ang_std2 = 10#30.
+        # self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
 
+        self.save_hyperparameters(hparams)
     
-    def ego_loc(self, img):
 
-        tmp = img.reshape(img.shape[0],img.shape[1],-1)
-        indices = torch.argmax(tmp,dim=-1)
-        row = indices // IMG_RES
-        column = indices - IMG_RES*row
+    # def ego_loc(self, img):
 
-        locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
+    #     tmp = img.reshape(img.shape[0],img.shape[1],-1)
+    #     indices = torch.argmax(tmp,dim=-1)
+    #     row = indices // IMG_RES
+    #     column = indices - IMG_RES*row
 
-        return locs
+    #     locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
 
-    def ego_transform(self, x):
+    #     return locs
 
-        ego = x[:,3:3+11]
 
-        timeframes = ego.shape[1]
+    # # TO be redone
+    # def ego_transform(self, x):
 
-        noise_pos = self.noise_pos_std*torch.randn((timeframes,2))
-        noise_pos = torch.cumsum(noise_pos, dim=1)
-        noise_pos = torch.flip(noise_pos,dims=(0,))
+    #     ego = x[:,3:3+11]
 
-        noise_ang = self.noise_ang_std*torch.randn((timeframes))
-        noise_ang = torch.cumsum(noise_ang, dim=0)
-        noise_ang = torch.flip(noise_ang,dims=(0,))
+    #     timeframes = ego.shape[1]
 
-        # Random rotation around end position of the ego vehicle
-        ego = self.ego_rotator(ego)
+    #     noise_pos = self.noise_pos_std*torch.randn((timeframes,2))
+    #     noise_pos = torch.cumsum(noise_pos, dim=1)
+    #     noise_pos = torch.flip(noise_pos,dims=(0,))
 
-        locs = self.ego_loc(ego)
+    #     noise_ang = self.noise_ang_std*torch.randn((timeframes))
+    #     noise_ang = torch.cumsum(noise_ang, dim=0)
+    #     noise_ang = torch.flip(noise_ang,dims=(0,))
 
-        for i in range(timeframes):
-            for b in range(ego.shape[0]):
+    #     # Random rotation around end position of the ego vehicle
+    #     ego = self.ego_rotator(ego)
+
+    #     locs = self.ego_loc(ego)
+
+    #     for i in range(timeframes):
+    #         for b in range(ego.shape[0]):
                 
-                translation = [noise_pos[i,0],noise_pos[i,1]]
-                center_rot = (locs[b,i,1], locs[b,i,0])
-                angle = noise_ang[i].item()
+    #             translation = [noise_pos[i,0],noise_pos[i,1]]
+    #             center_rot = (locs[b,i,1], locs[b,i,0])
+    #             angle = noise_ang[i].item()
 
-                # Random translation and rotation around vehicle
-                ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
+    #             # Random translation and rotation around vehicle
+    #             ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
             
-        x[:,3:3+11] = ego
+    #     x[:,3:3+11] = ego
 
-        return x
-            
+    #     return x
+
+
     def training_step(self, batch, batch_idx):
         
         x, y, is_available = batch
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
-        x = self.ego_transform(x)
+        # x = self.ego_transform(x)
         x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = self.loss(y, logits, confidences_logits, is_available)
@@ -139,6 +157,7 @@ class LightningModel(L.LightningModule):
         self.log("lr",lr)
 
         return loss
+
 
     def validation_step(self, batch, batch_idx):
 
@@ -151,6 +170,7 @@ class LightningModel(L.LightningModule):
 
         return loss
     
+
     def test_step(self, batch, batch_idx):
 
         x, y, is_available = batch
@@ -164,7 +184,9 @@ class LightningModel(L.LightningModule):
 
 
     def configure_optimizers(self):
+
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+
         if self.sched=="multistep":
             scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(50, 200, 50)), gamma=0.1)
         elif self.sched=="cyclic":

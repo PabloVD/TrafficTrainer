@@ -53,6 +53,7 @@ def parse_args():
     parser.add_argument(
         "--model", type=str, required=False, default="resnet18", help="CNN model name"
     )
+    parser.add_argument("--loss", type=str, required=False, default="NLL")
     parser.add_argument("--lr", type=float, required=False, default=1e-3)
     parser.add_argument("--batch-size", type=int, required=False, default=48)
     parser.add_argument("--n-epochs", type=int, required=False, default=60)
@@ -90,21 +91,23 @@ def main():
     batch_size = args.batch_size
     num_workers = 12
 
-    # Model parameters
-    model_name = args.model
-    in_channels=args.in_channels
-    time_limit = args.time_limit
-    n_traj = args.n_traj
-    lr = args.lr
-    sched = args.scheduler
-    weight_decay = args.wd
-
     # Training parameters
     n_epochs = args.n_epochs
     save_path = args.save_path
     #devices = args.num_devices
     devices = [0,1]
     devices = 1
+
+    # Model Hyperparameters
+    hparams = {}
+    hparams["model_name"] = args.model
+    hparams["loss"] = args.loss
+    hparams["in_channels"] = args.in_channels
+    hparams["time_limit"] = args.time_limit
+    hparams["n_traj"] = args.n_traj
+    hparams["lr"] = args.lr
+    hparams["scheduler"] = args.scheduler
+    hparams["weight_decay"] = args.wd
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')
@@ -133,16 +136,16 @@ def main():
         persistent_workers=True,
     )
 
-    checkpoint_callback = ModelCheckpoint(save_top_k=3, monitor="val_loss",filename=model_name+"-{epoch:02d}-{val_loss:.2f}")
+    checkpoint_callback = ModelCheckpoint(save_top_k=3, monitor="val_loss",filename="{epoch:02d}-{val_loss:.2f}")
 
     # Load checkpoint
     if load_checkoint:
         lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
         checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
         print("Loading from checkpoint",checkpoint)
-        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay, sched=sched)
+        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, hparams=hparams)
     else:
-        model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay, sched=sched)
+        model = LightningModel(hparams)
 
     print("Initializing trainer")
     trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16-mixed", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
