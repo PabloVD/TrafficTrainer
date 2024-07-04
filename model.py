@@ -5,6 +5,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 import torchvision.transforms as transforms
+from losses import NLL_loss, L2_loss, L1_loss
 
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
@@ -53,48 +54,13 @@ class Model(nn.Module):
         return confidences_logits, logits
 
 
-# Loss function
-def pytorch_neg_multi_log_likelihood_batch(gt, logits, confidences, avails):
-    """
-    Compute a negative log-likelihood for the multi-modal scenario.
-    Args:
-        gt (Tensor): array of shape (bs)x(time)x(2D coords)
-        logits (Tensor): array of shape (bs)x(modes)x(time)x(2D coords)
-        confidences (Tensor): array of shape (bs)x(modes) with a confidence for each mode in each sample
-        avails (Tensor): array of shape (bs)x(time) with the availability for each gt timestep
-    Returns:
-        Tensor: negative log-likelihood for this example, a single float number
-    """
-
-    # convert to (batch_size, num_modes, future_len, num_coords)
-    gt = torch.unsqueeze(gt, 1)  # add modes
-    avails = avails[:, None, :, None]  # add modes and cords
-
-    # error (batch_size, num_modes, future_len)
-    error = torch.sum(
-        ((gt - logits) * avails) ** 2, dim=-1
-    )  # reduce coords and use availability
-
-    with np.errstate(
-        divide="ignore"
-    ):  # when confidence is 0 log goes to -inf, but we're fine with it
-        # error (batch_size, num_modes)
-        error = nn.functional.log_softmax(confidences, dim=1) - 0.5 * torch.sum(
-            error, dim=-1
-        )  # reduce time
-
-    # error (batch_size, num_modes)
-    error = -torch.logsumexp(error, dim=-1, keepdim=True)
-
-    return torch.mean(error)
-
-
 # Lightning Module
 class LightningModel(L.LightningModule):
     def __init__(self, model_name, in_channels, time_limit, n_traj, lr, weight_decay, sched):
         super().__init__()
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
+        
         self.lr = lr
         self.weight_decay = weight_decay
         self.sched = sched
@@ -105,9 +71,13 @@ class LightningModel(L.LightningModule):
             transforms.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
         ])
 
-        self.noise_pos_std = 2.
-        self.noise_ang_std = 10.
-        self.noise_ang_std2 = 30.
+        #self.loss = NLL_loss()
+        self.loss = L2_loss()
+        #self.loss = L1_loss()
+
+        self.noise_pos_std = 1#2.
+        self.noise_ang_std = 5#10.
+        self.noise_ang_std2 = 10#30.
         self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
 
     
@@ -163,7 +133,7 @@ class LightningModel(L.LightningModule):
         x = self.ego_transform(x)
         x = self.transforms(x)
         confidences_logits, logits = self.model(x)
-        loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
+        loss = self.loss(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
         lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
         self.log("lr",lr)
@@ -176,7 +146,7 @@ class LightningModel(L.LightningModule):
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
         confidences_logits, logits = self.model(x)
-        loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
+        loss = self.loss(y, logits, confidences_logits, is_available)
         self.log("val_loss", loss, sync_dist=True)
 
         return loss
@@ -187,7 +157,7 @@ class LightningModel(L.LightningModule):
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
         confidences_logits, logits = self.model(x)
-        loss = pytorch_neg_multi_log_likelihood_batch(y, logits, confidences_logits, is_available)
+        loss = self.loss(y, logits, confidences_logits, is_available)
         self.log("test_loss", loss, sync_dist=True)
 
         return loss

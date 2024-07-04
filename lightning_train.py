@@ -103,8 +103,7 @@ def main():
     n_epochs = args.n_epochs
     save_path = args.save_path
     #devices = args.num_devices
-    devices = [0,1,2,3]
-    # devices = [4,5,6,7]
+    devices = [0,1]
     devices = 1
 
     # WandB logger
@@ -146,7 +145,7 @@ def main():
         model = LightningModel(model_name=model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj, lr=lr, weight_decay=weight_decay, sched=sched)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16-mixed", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 

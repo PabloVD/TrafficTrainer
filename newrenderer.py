@@ -23,9 +23,9 @@ color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 
 egocol = {1:(0,128,0),0:(0,0,255)}
 
-raster_size=224
-zoom_fact=1.3
-n_channels=11
+raster_size = 224
+zoom_fact = 1.3
+n_channels = 11
 
 def draw_roads(roadmap, centered_roadlines, roadlines_ids, roadlines_types, tl_dict):
 
@@ -33,13 +33,14 @@ def draw_roads(roadmap, centered_roadlines, roadlines_ids, roadlines_types, tl_d
     for road_id in unique_road_ids:
         if road_id >= 0:
             roadline = centered_roadlines[roadlines_ids == road_id]
-            road_type = roadlines_types[roadlines_ids == road_id].flatten()[0]
+            #road_type = roadlines_types[roadlines_ids == road_id].flatten()[0]
 
-            # road_color = road_colors[road_type]
-            # for col in color_to_rgb.keys():
-            #     if road_id in tl_dict[col]:
-            #         road_color = color_to_rgb[col]
+            #road_color = road_colors[road_type]
             road_color = 0
+            for col in color_to_rgb.keys():
+                if road_id in tl_dict[col]:
+                    road_color = color_to_rgb[col]
+            #road_color = 0
 
             roadmap = cv2.polylines(
                 roadmap,
@@ -751,7 +752,10 @@ def merge(data, proc_id, validate, out_dir, use_vectorize=False, max_rand_int=10
             raster_data[i]["val_all"] = valall
 
         r = np.random.randint(max_rand_int)
-        filename = f"{idx2type[int(raster_data[i]['self_type'])]}_{proc_id}_{str(i).zfill(5)}_{r}.npz"
+        
+        #type_agent = idx2type[int(raster_data[i]['self_type'])]
+        type_agent = "vehicle"
+        filename = f"{type_agent}_{proc_id}_{str(i).zfill(5)}_{r}.npz"
         np.savez_compressed(os.path.join(out_dir, filename), **raster_data[i])
 
 

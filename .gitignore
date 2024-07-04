@@ -3,3 +3,6 @@ logs/
 wandb/
 viz/
 models/
+scenarios/
+oldlogs/
+videos/
