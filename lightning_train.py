@@ -148,7 +148,7 @@ def main():
         model = LightningModel(hparams)
 
     print("Initializing trainer")
-    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16-mixed", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
+    trainer = L.Trainer(max_epochs=n_epochs, default_root_dir=save_path, accelerator=DEVICE, precision="16", callbacks=[checkpoint_callback], devices=devices)#, limit_train_batches=0.05, limit_val_batches=0.1)#, logger=wandb_logger)
 
     trainer.fit(model=model, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
 
