@@ -108,39 +108,56 @@ class LightningModel(L.LightningModule):
     #     return locs
 
 
-    # # TO be redone
-    # def ego_transform(self, x):
 
-    #     ego = x[:,3:3+11]
+    def ego_transform(self, x):
 
-    #     timeframes = ego.shape[1]
+        ego = x[:,3:3+11]
 
-    #     noise_pos = self.noise_pos_std*torch.randn((timeframes,2))
-    #     noise_pos = torch.cumsum(noise_pos, dim=1)
-    #     noise_pos = torch.flip(noise_pos,dims=(0,))
+        n_timeframes = ego.shape[1]
+        center_rot = [center_ego[1],center_ego[0]]
 
-    #     noise_ang = self.noise_ang_std*torch.randn((timeframes))
-    #     noise_ang = torch.cumsum(noise_ang, dim=0)
-    #     noise_ang = torch.flip(noise_ang,dims=(0,))
+        
+        # option 1
+        K = 10.
 
-    #     # Random rotation around end position of the ego vehicle
-    #     ego = self.ego_rotator(ego)
+        angle = 0.
+        angle_incr = np.random.uniform(-2,2)
+        for i in reversed(range(n_timeframes-1)):
 
-    #     locs = self.ego_loc(ego)
+            # option 1
+            angle += angle_incr
 
-    #     for i in range(timeframes):
-    #         for b in range(ego.shape[0]):
-                
-    #             translation = [noise_pos[i,0],noise_pos[i,1]]
-    #             center_rot = (locs[b,i,1], locs[b,i,0])
-    #             angle = noise_ang[i].item()
+            translation = [ -K*np.sin(angle*np.pi/180.) , -K*(1.-np.cos(angle*np.pi/180.)) ]
+            ego[:,i] = transforms.functional.affine(ego[:,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
+        # end option 1
 
-    #             # Random translation and rotation around vehicle
-    #             ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
+        # # option 2
+
+        # locs = ego_loc(ego)
+        # vel = locs[:,1:]-locs[:,:-1]
+        # vel = torch.sqrt(vel[:,:,0]**2. + vel[:,:,1]**2.)#/dt
+        # end_locs = locs[:,:-1]
+        # vel[torch.logical_and(end_locs[:,:,0]==0. , end_locs[:,:,1]==0.)]=0.
+
+        # angle_incr = 0.3
+        # angle_incr = np.random.uniform(-0.3,0.3)
+
+        # for b in range(ego.shape[0]):
+        #     angle = 0.
+
+        #     for i in reversed(range(n_timeframes-1)):
+
+        #         angle += vel[b,i].item()*angle_incr
+
+        #         #translation = [ vel[b,i]*np.cos(angle*np.pi/180.) , vel[b,i]*np.sin(angle*np.pi/180.) ]
+        #         translation = [  -vel[b,i]*np.sin(angle*np.pi/180.) ,  -vel[b,i]*np.cos(angle*np.pi/180.) ]
+        #         ego[:,i] = transforms.functional.affine(ego[:,i+1], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
+
+        # # end option 2
             
-    #     x[:,3:3+11] = ego
+        x[:,3:3+11] = ego
 
-    #     return x
+        return x
 
 
     def training_step(self, batch, batch_idx):
@@ -148,8 +165,8 @@ class LightningModel(L.LightningModule):
         x, y, is_available = batch
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
-        # x = self.ego_transform(x)
-        x = self.transforms(x)
+        x = self.ego_transform(x)
+        # x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = self.loss(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)
