@@ -92,6 +92,8 @@ class LightningModel(L.LightningModule):
         # self.noise_ang_std = 5#10.
         # self.noise_ang_std2 = 10#30.
         # self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
+        noise_ang_std2 = 20.
+        self.others_rotator = transforms.RandomRotation(noise_ang_std2)
 
         self.save_hyperparameters(hparams)
     
@@ -121,7 +123,7 @@ class LightningModel(L.LightningModule):
         K = 10.
 
         angle = 0.
-        angle_incr = np.random.uniform(-2,2)
+        angle_incr = np.random.uniform(-3,3)
         for i in reversed(range(n_timeframes-1)):
 
             # option 1
@@ -158,6 +160,12 @@ class LightningModel(L.LightningModule):
         x[:,3:3+11] = ego
 
         return x
+    
+    def others_transform(self, x):
+
+        others = x[:,3+11:3+11+11]
+        x[:,3+11:3+11+11] = self.others_rotator(others)
+        return x
 
 
     def training_step(self, batch, batch_idx):
@@ -166,6 +174,7 @@ class LightningModel(L.LightningModule):
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
         x = self.ego_transform(x)
+        x = self.others_transform(x)
         # x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = self.loss(y, logits, confidences_logits, is_available)

@@ -6,6 +6,8 @@ from tqdm import tqdm
 import os
 import torch
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from waymo_dataset import WaymoLoader
 
 torch.manual_seed(0)
 np.random.seed(0)
@@ -14,8 +16,9 @@ IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
 noise_pos_std = 2.
 noise_ang_std = 10.
-noise_ang_std2 = 90.
+noise_ang_std2 = 20.
 ego_rotator = transforms.RandomRotation(noise_ang_std2, center=(center_ego[1],center_ego[0]))
+others_rotator = transforms.RandomRotation(noise_ang_std2)
 
 transf = transforms.Compose([
             transforms.RandomRotation(10),
@@ -71,7 +74,7 @@ def ego_loc(img):
 
 #     return x
 
-def new_ego_transform(x):
+def ego_transform(x):
 
     ego = x[:,3:3+11]
 
@@ -83,7 +86,7 @@ def new_ego_transform(x):
     K = 10.
 
     angle = 0.
-    angle_incr = np.random.uniform(-2,2)
+    angle_incr = np.random.uniform(-3,3)
     for i in reversed(range(n_timeframes-1)):
 
         # option 1
@@ -121,6 +124,13 @@ def new_ego_transform(x):
 
     return x
 
+def others_transform(x):
+
+    others = x[:,3+11:3+11+11]
+    x[:,3+11:3+11+11] = others_rotator(others)
+    return x
+
+# raster expected in shape (imgsize,imgsize,channels)
 def raster2rgb(raster, i):
 
     road = raster[:,:,0:3]
@@ -133,7 +143,7 @@ def raster2rgb(raster, i):
 
     zeros = np.zeros_like(ego)
     ego_pos = np.concatenate([ego,ego,ego],axis=-1)
-    ego = np.concatenate([zeros,zeros,ego],axis=-1)/2.
+    ego = np.concatenate([zeros,zeros,ego],axis=-1)
     others_pos = np.concatenate([others,others,others],axis=-1)
     others = np.concatenate([zeros,others,zeros],axis=-1)/2.
 
@@ -157,25 +167,43 @@ if not os.path.exists(outpath):
 else:
     os.system("rm "+outpath+"*")
 
+dataloader = DataLoader(
+        WaymoLoader("/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered/"),
+        batch_size=1,
+        shuffle=False,
+        num_workers=1,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+
+
+
+
 print("Rendering frames")
-for j, filename in enumerate(tqdm(filenames)):
+# for j, filename in enumerate(tqdm(filenames)):
+for j, data in enumerate(tqdm(dataloader)):
 
     # if j>5:
     #     continue
 
-    data = np.load(filename, allow_pickle=True)
+    # data = np.load(filename, allow_pickle=True)
+    # raster = data["raster"].astype("float32") / 255
 
-    raster = data["raster"].astype("float32") / 255
+    raster = data[0]
 
-    if fixed_frame:
-        raster = raster.transpose(2, 1, 0)
-        # raster = raster.transpose(1, 0, 2)
+    #print(raster.shape)
 
-    raster = new_ego_transform(torch.Tensor(raster).unsqueeze(0))
-    #raster = transf(raster)
+    # if fixed_frame:
+    #     raster = raster.transpose(2, 1, 0)
+    #     #raster = raster.transpose(1, 0, 2)
+
+    raster = ego_transform(raster)
+    raster = others_transform(raster)
+
+    #print(raster.shape)
+    
     raster = raster.squeeze(0).numpy()
-
-    raster = raster.transpose(2, 1, 0)
+    raster = raster.transpose(1, 2, 0)
 
     for i in range(11):
 

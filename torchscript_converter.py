@@ -28,7 +28,7 @@ def main():
   
     script = model.to_torchscript()
 
-    torch.jit.save(script, "model_"+hparams["loss"]+"_"+str(hparams["time_limit"])+".pt")
+    torch.jit.save(script, "model_"+args.m+".pt")
 
 
 if __name__ == "__main__":
