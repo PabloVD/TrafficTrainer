@@ -1,7 +1,7 @@
 rm -r scenarios/*
 
-python3 store_test_data.py \
-	--model resnet18 \
+python3 test_model.py \
+	-m model_nll_80 \
 	--data /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered	\
 	--use-top1 \
 	--save ./viz \
