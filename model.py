@@ -98,16 +98,16 @@ class LightningModel(L.LightningModule):
         self.save_hyperparameters(hparams)
     
 
-    # def ego_loc(self, img):
+    def ego_loc(self, img):
 
-    #     tmp = img.reshape(img.shape[0],img.shape[1],-1)
-    #     indices = torch.argmax(tmp,dim=-1)
-    #     row = indices // IMG_RES
-    #     column = indices - IMG_RES*row
+        tmp = img.reshape(img.shape[0],img.shape[1],-1)
+        indices = torch.argmax(tmp,dim=-1)
+        row = indices // IMG_RES
+        column = indices - IMG_RES*row
 
-    #     locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
+        locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
 
-    #     return locs
+        return locs
 
 
 
@@ -134,7 +134,7 @@ class LightningModel(L.LightningModule):
 
         # option 2
 
-        locs = ego_loc(ego)
+        locs = self.ego_loc(ego)
         vel = locs[:,1:]-locs[:,:-1]
         vel = torch.sqrt(vel[:,:,0]**2. + vel[:,:,1]**2.)
         end_locs = locs[:,:-1]
