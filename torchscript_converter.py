@@ -11,24 +11,28 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def main():
+def export_model(modelname):
 
-    args = parse_args()
-
-    checkpoint_folder = "models/"+args.m
+    checkpoint_folder = "checkpoints/"+modelname
 
     with open(checkpoint_folder+"/hparams.yaml") as yamlfile:
         hparams = yaml.safe_load(yamlfile)
 
     checkpoints = sorted(glob.glob(checkpoint_folder+"/checkpoints/*ckpt"))
-    checkpoint = checkpoints[-1]
+    checkpoint = checkpoints[-1]    # Get the last checkpoint among the stored ones
 
     print("Loading from checkpoint",checkpoint)
     model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, hparams=hparams, map_location='cuda:0').cuda().eval()
   
     script = model.to_torchscript()
 
-    torch.jit.save(script, "model_"+args.m+".pt")
+    torch.jit.save(script, "models/"+modelname+".pt")
+
+def main():
+
+    args = parse_args()
+
+    export_model(args.m)
 
 
 if __name__ == "__main__":
