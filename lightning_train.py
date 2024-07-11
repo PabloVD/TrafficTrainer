@@ -66,7 +66,7 @@ def parse_args():
         help="Validate model each n epochs",
     )
     parser.add_argument(
-        "--num-devices", type=int, required=False, help="Number of devices used for training", default=1
+        "--devices", type=int, nargs='+', required=False, help="Devices used for training (list of gpu ids)", default=[0]
     )
     parser.add_argument(
         "--scheduler", type=str, required=False, default="multistep", help="Scheduler used for vary the learning rate"
@@ -94,9 +94,8 @@ def main():
     # Training parameters
     n_epochs = args.n_epochs
     save_path = args.save_path
-    #devices = args.num_devices
-    devices = [0,1]
-    devices = 1
+    devices = args.devices
+    print("Using devices",devices)
 
     # Model Hyperparameters
     hparams = {}
