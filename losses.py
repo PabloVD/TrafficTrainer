@@ -27,17 +27,17 @@ class NLL_loss(nn.Module):
         avails = avails[:, None, :, None]  # add modes and cords
 
         # error (batch_size, num_modes, future_len)
-        error = torch.sum(
-            ((gt - logits) * avails) ** 2, dim=-1
-        )  # reduce coords and use availability
+        error = torch.sum(((gt - logits) * avails)**2, dim=-1)  # reduce coords and use availability
 
-        with np.errstate(
-            divide="ignore"
-        ):  # when confidence is 0 log goes to -inf, but we're fine with it
-            # error (batch_size, num_modes)
-            error = nn.functional.log_softmax(confidences, dim=1) - 0.5 * torch.sum(
-                error, dim=-1
-            )  # reduce time
+        # with np.errstate(
+        #     divide="ignore"
+        # ):  # when confidence is 0 log goes to -inf, but we're fine with it
+        #     # error (batch_size, num_modes)
+        #     error = nn.functional.log_softmax(confidences, dim=1) - 0.5 * torch.sum(error, dim=-1)  # reduce time
+
+        # when confidence is 0 log goes to -inf, but we're fine with it
+        # error (batch_size, num_modes)
+        error = nn.functional.log_softmax(confidences, dim=1) - 0.5 * torch.sum(error, dim=-1)  # reduce time
 
         # error (batch_size, num_modes)
         error = -torch.logsumexp(error, dim=-1, keepdim=True)
