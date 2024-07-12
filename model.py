@@ -186,9 +186,9 @@ class LightningModel(L.LightningModule):
         x, y, is_available = batch
         y = y[:,:self.time_limit]
         is_available = is_available[:,:self.time_limit]
-        x = self.ego_transform(x)
-        x = self.others_transform(x)
-        # x = self.transforms(x)
+        # x = self.ego_transform(x)
+        # x = self.others_transform(x)
+        x = self.transforms(x)
         confidences_logits, logits = self.model(x)
         loss = self.loss(y, logits, confidences_logits, is_available)
         self.log("train_loss", loss)

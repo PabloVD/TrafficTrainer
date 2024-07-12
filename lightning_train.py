@@ -89,7 +89,7 @@ def main():
     train_path = args.train_data
     val_path = args.val_data
     batch_size = args.batch_size
-    num_workers = 12
+    num_workers = 10
 
     # Training parameters
     n_epochs = args.n_epochs
