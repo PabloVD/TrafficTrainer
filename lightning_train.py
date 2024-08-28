@@ -107,6 +107,7 @@ def main():
     hparams["lr"] = args.lr
     hparams["scheduler"] = args.scheduler
     hparams["weight_decay"] = args.wd
+    print(hparams)
 
     # WandB logger
     # wandb_logger = WandbLogger(project='TrafficTrainer')

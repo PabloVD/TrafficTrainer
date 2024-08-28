@@ -7,24 +7,27 @@ from waymo_dataset import WaymoLoader
 from tqdm import tqdm
 from torchscript_converter import export_model
 
-IMG_RES = 224
-IN_CHANNELS = 25
-TL = 80
 N_TRAJS = 6
-
 ntrajs = 2
 
 device = "cuda"
 
-samplfrec = 5 # sample at 2Hz for testing
+samplfrec = 1 # sample at 2Hz for testing
+time_limit = 20
+
+def eleventoten(x):
+    roads = x[:,:3]
+    ego = x[:,4:3+11]
+    others = x[:,4+11:]
+    return torch.cat([roads,ego,others],dim=1)
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("-m", type=str, required=True, help="Model name")
     parser.add_argument("--data", type=str, required=True)
-    parser.add_argument("--save", type=str, required=True)
     parser.add_argument("--n-samples", type=int, required=False, default=50)
     parser.add_argument("--store-data", action="store_true")
+    parser.add_argument("--export", action="store_true")
 
     args = parser.parse_args()
 
@@ -53,6 +56,9 @@ def interpolate_trajectories(traj, valid):
 # Expects arrays of shape (T,2)
 def displacement_error(x_true, x_pred):
 
+    x_true = x_true[:time_limit]
+    x_pred = x_pred[:time_limit]
+
     ade = np.sqrt(np.sum((x_pred[::samplfrec] - x_true[::samplfrec])**2.,axis=-1)).mean()
     fde = np.sqrt(np.sum((x_pred[-1] - x_true[-1])**2.,axis=-1))
 
@@ -60,14 +66,13 @@ def displacement_error(x_true, x_pred):
 
 def main():
     args = parse_args()
-    if not os.path.exists(args.save):
-        os.mkdir(args.save)
 
     store = args.store_data
     print("Store data for videos:",store)
 
-    print("Exporting model")
-    export_model(args.m)
+    if args.export:
+        print("Exporting model")
+        export_model(args.m)
 
     print("Testing model",args.m)
 
@@ -95,6 +100,8 @@ def main():
     with torch.no_grad():
         for x, y, is_available, vector_data, center, shift, yaw, scenario, gt_all, val_all in tqdm(loader):
             x, y, is_available = map(lambda x: x.cuda(), (x, y, is_available))
+
+            x = eleventoten(x)
 
             center = np.array(center)[0]
 
@@ -144,6 +151,9 @@ def main():
             confidences = confidences.squeeze(0).cpu().numpy()
             y = y.squeeze(0).cpu().numpy()
             is_available = is_available.squeeze(0).long().cpu().numpy()
+
+            y = y[:time_limit]
+            is_available = is_available[:time_limit]
 
             # Test results
             if y[is_available > 0].shape[0]>samplfrec:
