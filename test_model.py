@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
-from waymo_dataset import WaymoLoader
+from data_utils.waymo_dataset import WaymoLoader
 from tqdm import tqdm
 from torchscript_converter import export_model
 

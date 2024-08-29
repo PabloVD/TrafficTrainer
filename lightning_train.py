@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 import lightning as L
 from model import LightningModel
-from waymo_dataset import WaymoLoader
+from data_utils.waymo_dataset import WaymoLoader
 import glob
 from natsort import natsorted
 #from lightning.pytorch.loggers import WandbLogger

@@ -14,7 +14,7 @@ raster_size = 224
 
 displacement = np.array([[raster_size // 4, raster_size // 2]])
 
-def draw_roads(roadmap, centered_roadlines, roads_ids, roads_types, tl_dict):
+def draw_roads(roadmap, centered_roadlines, roads_ids, tl_dict):
 
     unique_road_ids = np.unique(roads_ids)
     for road_id in unique_road_ids:
@@ -44,7 +44,7 @@ def get_tl_dict(tl_states, tl_ids, tl_valids):
 
     # Unknown = 0, Arrow_Stop = 1, Arrow_Caution = 2, Arrow_Go = 3, Stop = 4,
     # Caution = 5, Go = 6, Flashing_Stop = 7, Flashing_Caution = 8
-    for tl_state, tl_id, tl_valid in zip(tl_states.flatten(), tl_ids.flatten(), tl_valids.flatten()):
+    for tl_state, tl_id, tl_valid in zip(tl_states.flatten(), tl_ids, tl_valids.flatten()):
         if tl_valid == 0 or tl_state==0:
             continue
         tl_dict[state_to_color[tl_state]].add(tl_id)
@@ -53,6 +53,7 @@ def get_tl_dict(tl_states, tl_ids, tl_valids):
 
 def rasterizer(
         ag,
+        ind_curr,
         agents_data,
         roads_data,
         tl_data,
@@ -60,21 +61,27 @@ def rasterizer(
         zoom_fact):
     
     agents_ids = agents_data["agents_ids"]
-    agents_valid = agents_data["agents_valid"]
-    XY = agents_data["XY"]
-    YAWS = agents_data["YAWS"]
-    GT_XY = agents_data["GT_XY"]
-    future_valid = agents_data["future_valid"]
+    agents_valid_split = agents_data["agents_valid"]
+    XY_split = agents_data["XY"]
+    YAWS_split = agents_data["YAWS"]
     lengths = agents_data["lengths"]
     widths = agents_data["widths"]
     
     roads_ids = roads_data["roads_ids"]
     roads_coords = roads_data["roads_coords"]
-    roads_types = roads_data["roads_types"]
 
     tl_ids = tl_data["tl_ids"]
-    tl_valid_hist = tl_data["tl_valid_hist"]
-    tl_states_hist = tl_data["tl_states_hist"]
+    tl_valid_split = tl_data["tl_valid"]
+    tl_states_split = tl_data["tl_states"]
+
+    XY = XY_split[:,ind_curr-n_channels+1:ind_curr+1]
+    GT_XY = XY_split[:,ind_curr+1:]
+    YAWS = YAWS_split[:,ind_curr-n_channels+1:ind_curr+1]
+    agents_valid = agents_valid_split[:,ind_curr-n_channels+1:ind_curr+1]
+    future_valid = agents_valid_split[:,ind_curr+1:]
+
+    tl_valid_hist = tl_valid_split[:,ind_curr-n_channels+1:ind_curr+1]
+    tl_states_hist = tl_states_split[:,ind_curr-n_channels+1:ind_curr+1]
 
     current_val = agents_valid[ag,-1]
     future_val = future_valid[ag]
@@ -122,7 +129,7 @@ def rasterizer(
 
     tl_dict = get_tl_dict(tl_states_hist[:,-1], tl_ids, tl_valid_hist[:,-1])
 
-    RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines, roads_ids, roads_types, tl_dict)
+    RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines, roads_ids, tl_dict)
 
 
 

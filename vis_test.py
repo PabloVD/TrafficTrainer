@@ -7,12 +7,15 @@ import os
 import torch
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from waymo_dataset import WaymoLoader
+from data_utils.waymo_dataset import WaymoLoader
 import random
 
 random.seed(0)
 torch.manual_seed(0)
 np.random.seed(0)
+
+inchannels = 10 #11
+# inchannels = 30
 
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
@@ -49,7 +52,7 @@ def ego_loc(img):
 
 # def ego_transform(x):
 
-#     ego = x[:,3:3+11]
+#     ego = x[:,3:3+inchannels]
 
 #     timeframes = ego.shape[1]
 
@@ -81,13 +84,13 @@ def ego_loc(img):
 #             # Random translation and rotation around vehicle
 #             ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
         
-#     x[:,3:3+11] += ego
+#     x[:,3:3+inchannels] += ego
 
 #     return x
 
 def ego_transform(x):
 
-    ego = x[:,3:3+11]
+    ego = x[:,3:3+inchannels]
 
     n_timeframes = ego.shape[1]
     center_rot = [ center_ego[1], center_ego[0] ]
@@ -118,7 +121,7 @@ def ego_transform(x):
 
     # angle_incr = 0.3#random.choice([-0.2,0.2])
     angle_incr = np.random.uniform(-0.3,0.3)
-    # angle_incr = 1
+    angle_incr = random.choice([-1,1])
 
     for b in range(ego.shape[0]):
         angle = 0.
@@ -144,14 +147,14 @@ def ego_transform(x):
 
     # end option 2
         
-    x[:,3:3+11] = ego
+    x[:,3:3+inchannels] = ego
 
     return x
 
 def others_transform(x):
 
-    others = x[:,3+11:3+11+11]
-    x[:,3+11:3+11+11] = others_rotator(others)
+    others = x[:,3+inchannels:3+inchannels*2]
+    x[:,3+inchannels:3+inchannels*2] = others_rotator(others)
     return x
 
 # raster expected in shape (imgsize,imgsize,channels)
@@ -160,7 +163,7 @@ def raster2rgb(raster, i):
     road = raster[:,:,0:3]
     img = np.copy(road)
     ego = raster[:,:,3+i]
-    others = raster[:,:,3+11+i]
+    others = raster[:,:,3+inchannels+i]
 
     ego = ego[:,:,None]
     others = others[:,:,None]
@@ -207,7 +210,7 @@ print("Rendering frames")
 # for j, filename in enumerate(tqdm(filenames)):
 for j, data in enumerate(tqdm(dataloader)):
 
-    if j>5:
+    if j>20:
         continue
 
     # if j!=5:
@@ -224,7 +227,7 @@ for j, data in enumerate(tqdm(dataloader)):
     #     raster = raster.transpose(2, 1, 0)
     #     #raster = raster.transpose(1, 0, 2)
 
-    raster = ego_transform(raster)
+    # raster = ego_transform(raster)
     #raster = others_transform(raster)
 
     #print(raster.shape)
@@ -232,7 +235,7 @@ for j, data in enumerate(tqdm(dataloader)):
     raster = raster.squeeze(0).numpy()
     raster = raster.transpose(1, 2, 0)
 
-    for i in range(11):
+    for i in range(inchannels):
         # for i in [10,0]:
 
         if fixed_frame:
@@ -243,6 +246,6 @@ for j, data in enumerate(tqdm(dataloader)):
         rast[rast>1]=1
 
         plt.imshow(rast)
-        plt.axis('off')
+        # plt.axis('off')
 
         plt.savefig(outpath+"/vehicle_"+str(j)+"_"+str(i)+".png", bbox_inches='tight')

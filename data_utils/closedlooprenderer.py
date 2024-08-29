@@ -23,7 +23,6 @@ zoom_fact = 3#1.3
 n_channels = 10
 #n_channels = 30
 
-total_files = 0
 
 
 
@@ -160,64 +159,66 @@ def rasterize(parsed, validate):
     agents_valid_all = np.concatenate((agents_valid, future_valid), axis=1)
     tl_states_hist_all = np.concatenate((tl_states_hist, tl_states_future.T), axis=1)
     tl_valid_hist_all = np.concatenate((tl_valid_hist,tl_future_valid.T),axis=1)
+    tl_ids = tl_ids.reshape(-1)
 
     # Shapes: (agents, timeframes, coords)
     #print(XY.shape, YAWS.shape, agents_valid.shape, tl_states_hist.shape)
 
     input_range = n_channels
     tot_steps = XY_all.shape[1] # 91
-    num_splits = 1
+    num_splits = 3
     future_range = int(tot_steps/num_splits) - input_range # 20 future steps with 10 history steps and 3 splits
     
     # input_range, future_range = n_channels, 0
     
     split_range = input_range+future_range
 
+    # Split data in differnt data chunks
     for split in range(num_splits):
 
         tind = split*split_range
-        curr_ind = tind+input_range-1
+        ind_curr = input_range-1
 
         XY_split = XY_all[:,tind:tind+split_range]
         YAWS_split = YAWS_all[:,tind:tind+split_range]
+        agents_valid_split = agents_valid_all[:,tind:tind+split_range]
 
-        data = {
-                "ind_curr":input_range-1
-        }
+        tl_states_split = tl_states_hist_all[:,tind:tind+split_range]
+        tl_valid_split = tl_valid_hist_all[:,tind:tind+split_range]
 
-        XY = XY_split[:,0:input_range]
-        GT_XY = XY_split[:,input_range:input_range+future_range]
-        YAWS = YAWS_split[:,0:input_range]
+        # data = {
+        #         "ind_curr":ind_curr
+        # }
+        # ind_curr = data["ind_curr"]
 
-        current_valid = agents_valid_all[:,curr_ind:curr_ind+1]
-        agents_valid = agents_valid_all[:,tind:tind+input_range]
-        future_valid = agents_valid_all[:,tind+input_range:tind+input_range+future_range]
-
-        tl_states_hist = tl_states_hist_all[:,tind:tind+input_range]
-        tl_valid_hist = tl_valid_hist_all[:,tind:tind+input_range]
-
-        # agents_ids_val = agents_ids[agents_ids>0]
-        # agents_valid_val = agents_valid[agents_ids>0]
-        # XY_val = XY[agents_ids>0]
-        # YAWS_val = YAWS[agents_ids>0]
+        agents_ids_split = agents_ids[agents_ids>0]
+        agents_valid_split = agents_valid_split[agents_ids>0]
+        XY_split = XY_split[agents_ids>0]
+        YAWS_split = YAWS_split[agents_ids>0]
+        lengths_split = lengths[agents_ids>0]
+        widths_split = widths[agents_ids>0]
         
-
-        agents_data = {"agents_ids":agents_ids,
-                       "agents_valid":agents_valid,
-                       "XY":XY,
-                       "YAWS":YAWS,
-                       "GT_XY":GT_XY,
-                       "future_valid":future_valid,
-                       "lengths":lengths,
-                       "widths":widths}
+        tl_ids_split = tl_ids[tl_ids>0]
+        tl_valid_split = tl_valid_split[tl_ids>0]
+        tl_states_split = tl_states_split[tl_ids>0]
+        
+        agents_data = {"agents_ids":agents_ids_split,
+                       "agents_valid":agents_valid_split,
+                       "XY":XY_split,
+                       "YAWS":YAWS_split,
+                       "lengths":lengths_split,
+                       "widths":widths_split}
         
         roads_data = {"roads_ids":roadlines_ids,
-                      "roads_coords":roadlines_coords,
-                      "roads_types":roadlines_types}
+                      "roads_coords":roadlines_coords}
         
-        tl_data = {"tl_ids":tl_ids,
-                   "tl_valid_hist":tl_valid_hist,
-                   "tl_states_hist":tl_states_hist}
+        tl_data = {"tl_ids":tl_ids_split,
+                   "tl_valid":tl_valid_split,
+                   "tl_states":tl_states_split}
+        
+        # print("we")
+        # for key, value in agents_data.items():
+        #     print(key,value.shape)
         
 
         # Loop over agents to track
@@ -234,6 +235,7 @@ def rasterize(parsed, validate):
 
             raster_dict = rasterizer(
                 ag,
+                ind_curr,
                 agents_data,
                 roads_data,
                 tl_data,
@@ -514,7 +516,6 @@ def vectorize(
 
 def merge(data, proc_id, validate, out_dir, use_vectorize=False, max_rand_int=10000000000):
 
-    global total_files
 
     parsed = tf.io.parse_single_example(data, features_description)
     raster_data = rasterize(parsed,validate=validate)
@@ -565,14 +566,13 @@ def merge(data, proc_id, validate, out_dir, use_vectorize=False, max_rand_int=10
         type_agent = "vehicle"
         filename = f"{type_agent}_{proc_id}_{str(i).zfill(5)}_{r}.npz"
         np.savez_compressed(os.path.join(out_dir, filename), **raster_data[i])
-        total_files += 1
     
 
     
 
 
 def main():
-    global total_files
+    
     args = parse_arguments()
     print(args)
 
@@ -606,8 +606,6 @@ def main():
 
     for r in tqdm(res):
         r.get()
-
-    print("total files",total_files)
 
 
 if __name__ == "__main__":
