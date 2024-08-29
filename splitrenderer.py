@@ -8,6 +8,47 @@ import tensorflow as tf
 from tqdm import tqdm
 from feature_descriptor import features_description
 
+np.random.seed(0)
+
+lmax = 50.
+maxamp = 1
+dataaug = True
+
+def get_orient(pos, yaws):
+
+    th_speed = 0.01
+
+    diffpos = pos[:,1:] - pos[:,:-1]
+    angle = np.arctan2(diffpos[:,:,1], diffpos[:,:,0])
+    angle = np.concatenate([angle,angle[:,-1:]],axis=1)
+
+    speed = np.linalg.norm(diffpos, axis=2)
+    speed = np.concatenate([speed,speed[:,-1:]],axis=1)
+
+    angle[speed<th_speed] = yaws[speed<th_speed]
+
+    return angle
+
+def perturb_trajectory(pos, yaws):
+
+    x, y = pos[:,:,0], pos[:,:,1]
+    numagents = x.shape[0]
+
+    factx = np.random.uniform(1,2,size=(numagents,1))
+    facty = np.random.uniform(1,2,size=(numagents,1))
+    factx, facty = 10.**factx, 10.**facty
+    ampx = np.random.uniform(-maxamp,maxamp,size=(numagents,1))
+    ampy = np.random.uniform(-maxamp,maxamp,size=(numagents,1))
+    # print(factx, facty, ampx, ampy)
+
+    x_mod = x + ampx*np.sin((x-x[-1])/lmax/factx)*lmax
+    y_mod = y + ampy*np.sin((y-y[-1])/lmax/facty)*lmax
+    pos_mod = np.concatenate([x_mod.reshape(numagents,-1,1),y_mod.reshape(numagents,-1,1)],axis=-1)
+
+    angle_mod = get_orient(pos_mod, yaws)
+
+    return pos_mod, angle_mod
+
 fixed_frame = True
 # fixed_frame = False
 
@@ -24,9 +65,10 @@ color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 egocol = {1:(0,128,0),0:(0,0,255)}
 
 raster_size = 224
-zoom_fact = 1.3
+zoom_fact = 3#1.3
 #n_channels = 11
-n_channels = 10
+#n_channels = 10
+n_channels = 30
 
 total_files = 0
 
@@ -202,8 +244,9 @@ def rasterize(parsed, validate):
     # Shapes: (agents, timeframes, coords)
     #print(XY.shape, YAWS.shape, agents_valid.shape, tl_states_hist.shape)
 
-    input_range = 10
+    input_range = n_channels
     future_range = 20
+    input_range, future_range = n_channels, 0
     num_splits = 3
     split_range = input_range+future_range
 
@@ -214,17 +257,24 @@ def rasterize(parsed, validate):
         tind = split*split_range
         curr_ind = tind+input_range-1
 
-        XY = XY_all[:,tind:tind+input_range]
-        GT_XY = XY_all[:,tind+input_range:tind+input_range+future_range]
-        YAWS = YAWS_all[:,tind:tind+input_range]
+        XY_split = XY_all[:,tind:tind+split_range]
+        YAWS_split = YAWS_all[:,tind:tind+split_range]
+        
+        if dataaug:
+            XY_split, YAWS_split = perturb_trajectory(XY_split, YAWS_split)
+
+        XY = XY_split[:,0:input_range]
+        GT_XY = XY_split[:,input_range:input_range+future_range]
+        YAWS = YAWS_split[:,0:input_range]
+
         current_valid = agents_valid_all[:,curr_ind:curr_ind+1]
         agents_valid = agents_valid_all[:,tind:tind+input_range]
-        current_yaw = YAWS_all[:,curr_ind:curr_ind+1]
         future_valid = agents_valid_all[:,tind+input_range:tind+input_range+future_range]
+
         tl_states_hist = tl_states_hist_all[:,tind:tind+input_range]
         tl_valid_hist = tl_valid_hist_all[:,tind:tind+input_range]
 
-        # print(tind, tind+input_range, tind+input_range+future_range, XY.shape, GT_XY.shape)
+        current_yaw = YAWS[:,-1:]
 
         # Loop over agents to track
         for _, (
