@@ -86,9 +86,11 @@ def rasterizer(
     current_val = agents_valid[ag,-1]
     future_val = future_valid[ag]
 
+    # print(XY.shape, GT_XY.shape)
+
     if (future_val.sum() == 0) or (current_val == 0):
         return None
-    
+        
     RES_ROADMAP = (
         np.ones((raster_size, raster_size, 3), dtype=np.uint8) * MAX_PIXEL_VALUE
     )
@@ -219,8 +221,7 @@ def rasterizer(
                     color=MAX_PIXEL_VALUE
                 )
 
-    raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)
-    
+    raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)    
 
     raster_dict = {
         "object_id": ego_id,

@@ -19,13 +19,7 @@ egocol = {1:(0,128,0),0:(0,0,255)}
 
 
 zoom_fact = 3#1.3
-#n_channels = 11
-n_channels = 10
-#n_channels = 30
-
-
-
-
+history = 10
 
 
 def parse_arguments():
@@ -164,20 +158,15 @@ def rasterize(parsed, validate):
     # Shapes: (agents, timeframes, coords)
     #print(XY.shape, YAWS.shape, agents_valid.shape, tl_states_hist.shape)
 
-    input_range = n_channels
     tot_steps = XY_all.shape[1] # 91
     num_splits = 3
-    future_range = int(tot_steps/num_splits) - input_range # 20 future steps with 10 history steps and 3 splits
-    
-    # input_range, future_range = n_channels, 0
-    
-    split_range = input_range+future_range
+    split_range = int(tot_steps/num_splits) # 20 future steps with 10 history steps and 3 splits
 
     # Split data in differnt data chunks
     for split in range(num_splits):
 
         tind = split*split_range
-        ind_curr = input_range-1
+        ind_curr = history-1
 
         XY_split = XY_all[:,tind:tind+split_range]
         YAWS_split = YAWS_all[:,tind:tind+split_range]
@@ -216,10 +205,6 @@ def rasterize(parsed, validate):
                    "tl_valid":tl_valid_split,
                    "tl_states":tl_states_split}
         
-        # print("we")
-        # for key, value in agents_data.items():
-        #     print(key,value.shape)
-        
 
         # Loop over agents to track
         for ag in range(len(agents_ids)):
@@ -239,12 +224,15 @@ def rasterize(parsed, validate):
                 agents_data,
                 roads_data,
                 tl_data,
-                n_channels,
+                history,
                 zoom_fact)
             
             if raster_dict is not None:
 
                 raster_dict["scenario_id"]: scenario_id
+                raster_dict["agents_data"]: agents_data
+                raster_dict["roads_data"]: roads_data
+                raster_dict["tl_data"]: tl_data
 
                 GRES.append(raster_dict)
 
@@ -315,7 +303,7 @@ def vectorize(
     future_y,
     future_valid,
     validate,
-    n_channels=11,
+    history=10,
 ):
 
     XY = np.concatenate(
@@ -447,7 +435,7 @@ def vectorize(
         ) @ rot_matrix.astype(np.float64)
 
         local_XY = ((XY - centered_xy).reshape(-1, 2) @ rot_matrix).reshape(
-            128, n_channels, 2
+            128, history, 2
         )
 
         for (
