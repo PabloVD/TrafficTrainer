@@ -49,7 +49,6 @@ def parse_args():
     parser.add_argument(
         "--save_path", type=str, required=True, help="Path to save model and logs"
     )
-
     parser.add_argument(
         "--model", type=str, required=False, default="resnet18", help="CNN model name"
     )

@@ -127,15 +127,16 @@ def rasterizer(
     val = agents_valid[ag]
     ego_id = agents_ids[ag]
     gt_xy = GT_XY[ag]
-
-    xy_val = xy[val > 0]
+    
     if prerender:
+        xy_val = xy[val > 0]
         if len(xy_val) == 0:
             return None
+    else:
+        xy_val = xy
     
     roads_coords = roads_coords[roads_valid > 0]
     roads_ids = roads_ids[roads_valid > 0]
-
 
     unscaled_center_xy = xy_val[-1].reshape(1, -1)
     center_xy = unscaled_center_xy*zoom_fact

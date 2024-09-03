@@ -11,12 +11,12 @@ from data_utils.rasterizer import rasterizer
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
 
-import os
-outpath = "rendertests"
-if not os.path.exists(outpath):
-    os.system("mkdir "+outpath)
-else:
-    os.system("rm "+outpath+"/*")
+# import os
+# outpath = "rendertests"
+# if not os.path.exists(outpath):
+#     os.system("mkdir "+outpath)
+# else:
+#     os.system("rm "+outpath+"/*")
 
 # CNN model
 class Model(nn.Module):
@@ -178,8 +178,6 @@ class LightningModel(L.LightningModule):
 
         for tind in range(self.history-1,self.history-1+self.time_limit-1):
 
-            print(tind)
-
             y = batch["gt_marginal"][:,tind-(self.history-1):]
             is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
 
@@ -187,7 +185,7 @@ class LightningModel(L.LightningModule):
 
                 x = self.get_raster_input(x, batch, XY, YAW, tind)                
 
-            np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
+            # np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]
@@ -203,28 +201,53 @@ class LightningModel(L.LightningModule):
         return loss
 
 
-    # def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):
+
+        x = batch["raster"]
+        XY = batch["XY"]
+        YAW = batch["YAWS"]
+
+        loss = 0.
+
+        for tind in range(self.history-1,self.history-1+self.time_limit-1):
+
+            y = batch["gt_marginal"][:,tind-(self.history-1):]
+            is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
+
+            if tind>self.history-1:
+
+                x = self.get_raster_input(x, batch, XY, YAW, tind)                
+
+            confidences_logits, logits = self.model(x)
+            logits = logits[:,:,tind-(self.history-1):]
+            loss += self.loss(y, logits, confidences_logits, is_available)
+
+            XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
+
+        self.log("val_loss", loss)
+
+        return loss
+
+        # x, y, is_available = batch
+        # y = y[:,:self.time_limit]
+        # is_available = is_available[:,:self.time_limit]
+        # confidences_logits, logits = self.model(x)
+        # loss = self.loss(y, logits, confidences_logits, is_available)
+        # self.log("val_loss", loss, sync_dist=True)
+
+        # return loss
+    
+
+    # def test_step(self, batch, batch_idx):
 
     #     x, y, is_available = batch
     #     y = y[:,:self.time_limit]
     #     is_available = is_available[:,:self.time_limit]
     #     confidences_logits, logits = self.model(x)
     #     loss = self.loss(y, logits, confidences_logits, is_available)
-    #     self.log("val_loss", loss, sync_dist=True)
+    #     self.log("test_loss", loss, sync_dist=True)
 
     #     return loss
-    
-
-    def test_step(self, batch, batch_idx):
-
-        x, y, is_available = batch
-        y = y[:,:self.time_limit]
-        is_available = is_available[:,:self.time_limit]
-        confidences_logits, logits = self.model(x)
-        loss = self.loss(y, logits, confidences_logits, is_available)
-        self.log("test_loss", loss, sync_dist=True)
-
-        return loss
 
 
     def configure_optimizers(self):
