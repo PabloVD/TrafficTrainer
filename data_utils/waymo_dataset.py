@@ -2,8 +2,6 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 
-fixed_frame = True
-#fixed_frame = False
 
 class WaymoLoader(Dataset):
     def __init__(self, directory, limit=0, return_vector=False, is_test=False):
@@ -26,35 +24,66 @@ class WaymoLoader(Dataset):
         
         data = np.load(filename, allow_pickle=True)
 
-        raster = data["raster"].astype("float32")
+        # batch = {}
+        # for key in data.keys():
+        #     print(key, type(data[key]), data[key].shape)
+        #     batch[key]=data[key]
+
+        # batch["agent_ind"]=batch["agent_ind"].reshape(-1,1)
+        # batch["scenario_id"]=batch["scenario_id"].reshape(-1,1)
+
+        # print(batch["agent_ind"], batch["scenario_id"])
+
         
-        if not fixed_frame:
-            raster = raster.transpose(0, 3, 1, 2) / 255
-            raster = raster.reshape(-1, raster.shape[-2], raster.shape[-1])
-        else:
-            raster = raster.transpose(2, 1, 0) / 255
+        # batch = {"x":data["raster"],
+        #          "y": data["gt_marginal"],
+        #          "is_available": data["future_val_marginal"],
+        #          "XY":data["XY"]}
 
-        if self.is_test:
-            center = data["shift"]
-            yaw = data["yaw"]
-            agent_id = data["object_id"]
-            scenario_id = data["scenario_id"]
+        # raster = data["raster"]#.astype("float32")
 
-            return (
-                raster,
-                center,
-                yaw,
-                agent_id,
-                str(scenario_id),
-                data["_gt_marginal"],
-                data["gt_marginal"],
-            )
+        # for key in data.keys():
+        #     print(key)#,data["key".shape])
 
-        trajectory = data["gt_marginal"]
+        # data = dict(data)
+        # print(type(data))
 
-        is_available = data["future_val_marginal"]
+        # print("er")
+        # print(data["raster"].shape,data["XY"].shape)
+        # print(data["agents_data"])
+        # print(data["tl_data"])
+        # print(data["roads_data"])
 
-        if self.return_vector:
-            return raster, trajectory, is_available, data["vector_data"], data["center"], data["shift"], data["yaw"], str(data["scenario_id"]), data["gt_all"], data["val_all"]
 
-        return raster, trajectory, is_available
+
+        # raster = data["raster"].astype("float32")
+        
+        # raster = raster.transpose(2, 1, 0) / 255
+
+        # Temporarily commented
+        # if self.is_test:
+        #     center = data["shift"]
+        #     yaw = data["yaw"]
+        #     agent_id = data["object_id"]
+        #     scenario_id = data["scenario_id"]
+
+        #     return (
+        #         raster,
+        #         center,
+        #         yaw,
+        #         agent_id,
+        #         str(scenario_id),
+        #         data["_gt_marginal"],
+        #         data["gt_marginal"],
+        #     )
+
+        # trajectory = data["gt_marginal"]
+
+        # is_available = data["future_val_marginal"]
+
+        # # if self.return_vector:
+        # #     return raster, trajectory, is_available, data["vector_data"], data["center"], data["shift"], data["yaw"], str(data["scenario_id"]), data["gt_all"], data["val_all"]
+
+        # return raster, trajectory, is_available
+
+        return data

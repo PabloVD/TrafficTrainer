@@ -18,7 +18,6 @@ idx2type = ["unset", "vehicle", "pedestrian", "cyclist", "other"]
 egocol = {1:(0,128,0),0:(0,0,255)}
 
 
-zoom_fact = 3#1.3
 history = 10
 
 
@@ -133,10 +132,10 @@ def rasterize(parsed, validate):
 
     # Prepare roads
     roadlines_valid = roadlines_valid.reshape(-1)
-    roadlines_coords = roadlines_coords[:, :2][roadlines_valid > 0]
+    roadlines_coords = roadlines_coords[:, :2]#[roadlines_valid > 0]
 
-    roadlines_types = roadlines_types[roadlines_valid > 0]
-    roadlines_ids = roadlines_ids.reshape(-1)[roadlines_valid > 0]
+    # roadlines_types = roadlines_types[roadlines_valid > 0]
+    roadlines_ids = roadlines_ids.reshape(-1)#[roadlines_valid > 0]
 
     # Center in map, useful for offline rendering
     # mapcenter = roadlines_coords.mean(0)
@@ -144,8 +143,6 @@ def rasterize(parsed, validate):
     # XY = XY - mapcenter
     # GT_XY = GT_XY - mapcenter
     # TL_XY = TL_XY - mapcenter
-
-    roadlines_coords = roadlines_coords*zoom_fact
 
     # Concatenate all past, current and future data
     XY_all = np.concatenate( [XY, GT_XY], axis=1 )
@@ -162,7 +159,7 @@ def rasterize(parsed, validate):
     num_splits = 3
     split_range = int(tot_steps/num_splits) # 20 future steps with 10 history steps and 3 splits
 
-    # Split data in differnt data chunks
+    # Split data in different data chunks
     for split in range(num_splits):
 
         tind = split*split_range
@@ -175,21 +172,21 @@ def rasterize(parsed, validate):
         tl_states_split = tl_states_hist_all[:,tind:tind+split_range]
         tl_valid_split = tl_valid_hist_all[:,tind:tind+split_range]
 
-        # data = {
-        #         "ind_curr":ind_curr
-        # }
-        # ind_curr = data["ind_curr"]
-
-        agents_ids_split = agents_ids[agents_ids>0]
-        agents_valid_split = agents_valid_split[agents_ids>0]
-        XY_split = XY_split[agents_ids>0]
-        YAWS_split = YAWS_split[agents_ids>0]
-        lengths_split = lengths[agents_ids>0]
-        widths_split = widths[agents_ids>0]
+        # agents_ids_split = agents_ids[agents_ids>0]
+        # agents_valid_split = agents_valid_split[agents_ids>0]
+        # XY_split = XY_split[agents_ids>0]
+        # YAWS_split = YAWS_split[agents_ids>0]
+        # lengths_split = lengths[agents_ids>0]
+        # widths_split = widths[agents_ids>0]
         
-        tl_ids_split = tl_ids[tl_ids>0]
-        tl_valid_split = tl_valid_split[tl_ids>0]
-        tl_states_split = tl_states_split[tl_ids>0]
+        # tl_ids_split = tl_ids[tl_ids>0]
+        # tl_valid_split = tl_valid_split[tl_ids>0]
+        # tl_states_split = tl_states_split[tl_ids>0]
+
+        agents_ids_split = agents_ids
+        lengths_split = lengths
+        widths_split = widths
+        tl_ids_split = tl_ids
         
         agents_data = {"agents_ids":agents_ids_split,
                        "agents_valid":agents_valid_split,
@@ -199,12 +196,13 @@ def rasterize(parsed, validate):
                        "widths":widths_split}
         
         roads_data = {"roads_ids":roadlines_ids,
+                      "roads_valid":roadlines_valid,
                       "roads_coords":roadlines_coords}
         
         tl_data = {"tl_ids":tl_ids_split,
                    "tl_valid":tl_valid_split,
                    "tl_states":tl_states_split}
-        
+                
 
         # Loop over agents to track
         for ag in range(len(agents_ids)):
@@ -224,15 +222,21 @@ def rasterize(parsed, validate):
                 agents_data,
                 roads_data,
                 tl_data,
-                history,
-                zoom_fact)
+                history)
             
             if raster_dict is not None:
 
-                raster_dict["scenario_id"]: scenario_id
-                raster_dict["agents_data"]: agents_data
-                raster_dict["roads_data"]: roads_data
-                raster_dict["tl_data"]: tl_data
+                # raster_dict["scenario_id"] = scenario_id
+                # raster_dict["agents_data"] = agents_data
+                # raster_dict["roads_data"] = roads_data
+                # raster_dict["tl_data"] = tl_dataçç
+                for key in agents_data.keys():
+                    raster_dict[key]=agents_data[key]
+                for key in roads_data.keys():
+                    raster_dict[key]=roads_data[key]
+                for key in tl_data.keys():
+                    raster_dict[key]=tl_data[key]
+
 
                 GRES.append(raster_dict)
 

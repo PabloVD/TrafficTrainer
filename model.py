@@ -6,9 +6,17 @@ from torch import optim, nn
 import lightning as L
 import torchvision.transforms as transforms
 from losses import NLL_loss, L2_loss, L1_loss
+from data_utils.rasterizer import rasterizer
 
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
+
+import os
+outpath = "rendertests"
+if not os.path.exists(outpath):
+    os.system("mkdir "+outpath)
+else:
+    os.system("rm "+outpath+"/*")
 
 # CNN model
 class Model(nn.Module):
@@ -65,6 +73,7 @@ class LightningModel(L.LightningModule):
         in_channels = hparams["in_channels"]
         time_limit = hparams["time_limit"]
         n_traj = hparams["n_traj"]
+        self.history = 10
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         
@@ -88,109 +97,105 @@ class LightningModel(L.LightningModule):
         else:
             print("Loss not valid")
 
-        # self.noise_pos_std = 1#2.
-        # self.noise_ang_std = 5#10.
-        # self.noise_ang_std2 = 10#30.
-        # self.ego_rotator = transforms.RandomRotation(self.noise_ang_std2, center=(center_ego[1],center_ego[0]))
-        noise_ang_std2 = 20.
-        self.others_rotator = transforms.RandomRotation(noise_ang_std2)
-
         self.save_hyperparameters(hparams)
     
 
-    def ego_loc(self, img):
+    def update_step(self, XY, YAW, confidences, logits, agind, currind):
 
-        tmp = img.reshape(img.shape[0],img.shape[1],-1)
-        indices = torch.argmax(tmp,dim=-1)
-        row = indices // IMG_RES
-        column = indices - IMG_RES*row
+        # TO DO improve with array multiplication
+        for j in range(XY.shape[0]):
 
-        locs = torch.cat([row.unsqueeze(-1),column.unsqueeze(-1)],dim=-1)
+            xy_ag = XY[j, agind[j]]
+            yaw_ag = YAW[j, agind[j]]
 
-        return locs
+            indmax = confidences[j].argmax()
+            # sortedtens, indices = torch.sort(confidences[j])
+            # indmax = indices[-2]
 
+            pred = logits[j,indmax]
 
+            currpos, curryaw = xy_ag[currind], yaw_ag[currind]*np.pi/180.
 
-    def ego_transform(self, x):
+            c = torch.cos(-curryaw)
+            s = torch.sin(-curryaw)
+            rot_matrix = torch.stack([torch.stack([c, -s]),torch.stack([s, c])])
+        
+            pred = pred@rot_matrix + currpos 
 
-        ego = x[:,3:3+11]
+            # Displace directly the vehicle to the predicted position
+            nextpos =  pred[0]
 
-        n_timeframes = ego.shape[1]
-        center_rot = [ center_ego[1], center_ego[0] ]
+            # Estimate orientation
+            diffpos = nextpos - currpos
+            newyaw = torch.arctan2(diffpos[1], diffpos[0])*180./np.pi
 
-        # # option 1
-        # K = 10.
+            XY[j, agind[j],currind+1] = nextpos
+            YAW[j, agind[j],currind+1] = newyaw
 
-        # angle = 0.
-        # angle_incr = np.random.uniform(-3,3)
-        # for i in reversed(range(n_timeframes-1)):
-
-        #     # option 1
-        #     angle += angle_incr
-
-        #     translation = [ -K*np.sin(angle*np.pi/180.) , -K*(1.-np.cos(angle*np.pi/180.)) ]
-        #     ego[:,i] = transforms.functional.affine(ego[:,i], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
-        # # end option 1
-
-        # option 2
-
-        locs = self.ego_loc(ego)
-        vel = locs[:,1:]-locs[:,:-1]
-        vel = torch.sqrt(vel[:,:,0]**2. + vel[:,:,1]**2.)
-        end_locs = locs[:,:-1]
-        vel[torch.logical_and(end_locs[:,:,0]==0. , end_locs[:,:,1]==0.)]=0.
-
-        vel = torch.clamp(vel, 0, 3)
-
-        # angle_incr = 0.3#random.choice([-0.2,0.2])
-        angle_incr = np.random.uniform(-0.3,0.3)
-        # angle_incr = 1
-
-        for b in range(ego.shape[0]):
-            angle = 0.
-            # translation = [0.,0.]
-
-            for i in reversed(range(n_timeframes-1)):
-
-                angle += vel[b,i].item()*angle_incr
-                # angle += np.clip(vel[b,i].item()*angle_incr, a_min=-0.6, a_max=0.6)
-
-                # if vel[b,i].item()>0:
-                #     angle += angle_incr
-                # else:
-                #     angle 
-
-                translation = [ -vel[b,i]*np.sin(angle*np.pi/180.) ,  -vel[b,i]*np.cos(angle*np.pi/180.) ]
-                # translation = [ translation[0] + -vel[b,i]*np.sin(angle*np.pi/180.) , translation[1] + -vel[b,i]*np.cos(angle*np.pi/180.) ]
-
-                # ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,-1], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
-                ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i+1], translate=translation, angle=angle, scale=1, shear=0, center=center_rot)
-                # ego[b:b+1,i] = transforms.functional.affine(ego[b:b+1,i+1], translate=translation, angle=vel[b,i].item()*angle_incr, scale=1, shear=0, center=center_rot)
-
-
-        # end option 2
-            
-        x[:,3:3+11] = ego
-
-        return x
+        return XY, YAW
     
-    def others_transform(self, x):
+    def get_raster_input(self, x, batch, XY, YAW, tind):
 
-        others = x[:,3+11:3+11+11]
-        x[:,3+11:3+11+11] = self.others_rotator(others)
+        x = torch.zeros_like(x)
+
+        for b in range(x.shape[0]):
+
+            agents_data = {"agents_ids":batch["agents_ids"][b].cpu().detach().numpy(),
+                            "agents_valid":batch["agents_valid"][b].cpu().detach().numpy(),
+                            "XY":XY[b].cpu().detach().numpy(),
+                            "YAWS":YAW[b].cpu().detach().numpy(),
+                            "lengths":batch["lengths"][b].cpu().detach().numpy(),
+                            "widths":batch["widths"][b].cpu().detach().numpy()}
+
+            roads_data = {"roads_ids":batch["roads_ids"][b].cpu().detach().numpy(),
+                            "roads_valid":batch["roads_valid"][b].cpu().detach().numpy(),
+                            "roads_coords":batch["roads_coords"][b].cpu().detach().numpy()}
+            
+            tl_data = {"tl_ids":batch["tl_ids"][b].cpu().detach().numpy(),
+                        "tl_valid":batch["tl_valid"][b].cpu().detach().numpy(),
+                        "tl_states":batch["tl_states"][b].cpu().detach().numpy()}
+            
+            raster_dict = rasterizer(batch["agent_ind"][b].cpu(),
+                                        tind,
+                                        agents_data,
+                                        roads_data,
+                                        tl_data,
+                                        self.history,
+                                        prerender=False)
+            
+            x[b] = torch.Tensor(raster_dict["raster"])
+
         return x
 
 
     def training_step(self, batch, batch_idx):
         
-        x, y, is_available = batch
-        y = y[:,:self.time_limit]
-        is_available = is_available[:,:self.time_limit]
-        # x = self.ego_transform(x)
-        # x = self.others_transform(x)
-        x = self.transforms(x)
-        confidences_logits, logits = self.model(x)
-        loss = self.loss(y, logits, confidences_logits, is_available)
+        x = batch["raster"]
+        XY = batch["XY"]
+        YAW = batch["YAWS"]
+
+        loss = 0.
+
+        for tind in range(self.history-1,self.history-1+self.time_limit-1):
+
+            print(tind)
+
+            y = batch["gt_marginal"][:,tind-(self.history-1):]
+            is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
+
+            if tind>self.history-1:
+
+                x = self.get_raster_input(x, batch, XY, YAW, tind)                
+
+            np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
+
+            confidences_logits, logits = self.model(x)
+            logits = logits[:,:,tind-(self.history-1):]
+            loss += self.loss(y, logits, confidences_logits, is_available)
+
+            XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
+
+
         self.log("train_loss", loss)
         lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
         self.log("lr",lr)
@@ -198,16 +203,16 @@ class LightningModel(L.LightningModule):
         return loss
 
 
-    def validation_step(self, batch, batch_idx):
+    # def validation_step(self, batch, batch_idx):
 
-        x, y, is_available = batch
-        y = y[:,:self.time_limit]
-        is_available = is_available[:,:self.time_limit]
-        confidences_logits, logits = self.model(x)
-        loss = self.loss(y, logits, confidences_logits, is_available)
-        self.log("val_loss", loss, sync_dist=True)
+    #     x, y, is_available = batch
+    #     y = y[:,:self.time_limit]
+    #     is_available = is_available[:,:self.time_limit]
+    #     confidences_logits, logits = self.model(x)
+    #     loss = self.loss(y, logits, confidences_logits, is_available)
+    #     self.log("val_loss", loss, sync_dist=True)
 
-        return loss
+    #     return loss
     
 
     def test_step(self, batch, batch_idx):

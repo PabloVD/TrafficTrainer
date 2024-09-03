@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+# import torch
 
 MAX_PIXEL_VALUE = 255
 N_ROADS = 21
@@ -11,10 +12,9 @@ state_to_color = {1:"red",4:"red",7:"red",2:"yellow",5:"yellow",8:"yellow",3:"gr
 color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 
 raster_size = 224
+zoom_fact = 3.
 
-displacement = np.array([[raster_size // 4, raster_size // 2]])
-
-def draw_roads(roadmap, centered_roadlines, roads_ids, tl_dict):
+def draw_roads(roadmap, centered_roadlines, roads_ids, tl_dict, prerender=True):
 
     unique_road_ids = np.unique(roads_ids)
     for road_id in unique_road_ids:
@@ -29,9 +29,16 @@ def draw_roads(roadmap, centered_roadlines, roads_ids, tl_dict):
                     road_color = color_to_rgb[col]
             #road_color = 0
 
+ 
+            # if prerender:
+            #     rd = roadline.astype(int)
+            # else:
+            #     rd = roadline.to(torch.int64)
+            rd = np.array( roadline, dtype=int)
+
             roadmap = cv2.polylines(
                 roadmap,
-                [roadline.astype(int)],
+                [rd],
                 False,
                 road_color
             )
@@ -47,7 +54,9 @@ def get_tl_dict(tl_states, tl_ids, tl_valids):
     for tl_state, tl_id, tl_valid in zip(tl_states.flatten(), tl_ids, tl_valids.flatten()):
         if tl_valid == 0 or tl_state==0:
             continue
-        tl_dict[state_to_color[tl_state]].add(tl_id)
+        # print(tl_id, tl_state, tl_dict)
+        # print(state_to_color[tl_state.item()])
+        tl_dict[state_to_color[tl_state.item()]].add(tl_id)
 
     return tl_dict
 
@@ -58,7 +67,8 @@ def rasterizer(
         roads_data,
         tl_data,
         n_channels,
-        zoom_fact):
+        zoom_fact=zoom_fact,
+        prerender=True):
     
     agents_ids = agents_data["agents_ids"]
     agents_valid_split = agents_data["agents_valid"]
@@ -68,6 +78,7 @@ def rasterizer(
     widths = agents_data["widths"]
     
     roads_ids = roads_data["roads_ids"]
+    roads_valid = roads_data["roads_valid"]
     roads_coords = roads_data["roads_coords"]
 
     tl_ids = tl_data["tl_ids"]
@@ -86,10 +97,18 @@ def rasterizer(
     current_val = agents_valid[ag,-1]
     future_val = future_valid[ag]
 
+    # if prerender:
+    #     displacement = np.array([[raster_size // 4, raster_size // 2]])
+    # else:
+    #     displacement = torch.Tensor([[raster_size // 4, raster_size // 2]])
+    displacement = np.array([[raster_size // 4, raster_size // 2]])
+
+
     # print(XY.shape, GT_XY.shape)
 
-    if (future_val.sum() == 0) or (current_val == 0):
-        return None
+    if prerender:
+        if (future_val.sum() == 0) or (current_val == 0):
+            return None
         
     RES_ROADMAP = (
         np.ones((raster_size, raster_size, 3), dtype=np.uint8) * MAX_PIXEL_VALUE
@@ -110,20 +129,38 @@ def rasterizer(
     gt_xy = GT_XY[ag]
 
     xy_val = xy[val > 0]
-    if len(xy_val) == 0:
-        return None
+    if prerender:
+        if len(xy_val) == 0:
+            return None
+    
+    roads_coords = roads_coords[roads_valid > 0]
+    roads_ids = roads_ids[roads_valid > 0]
 
 
     unscaled_center_xy = xy_val[-1].reshape(1, -1)
     center_xy = unscaled_center_xy*zoom_fact
     yawt = yaw_ego[-1]
-    rot_matrix = np.array(
-        [
-            [np.cos(yawt), -np.sin(yawt)],
-            [np.sin(yawt), np.cos(yawt)],
-        ]
-    )
 
+    # if prerender:
+    #     rot_matrix = np.array(
+    #         [
+    #             [np.cos(yawt), -np.sin(yawt)],
+    #             [np.sin(yawt), np.cos(yawt)],
+    #         ]
+    #     )
+    # else:
+    #     c = torch.cos(yawt)
+    #     s = torch.sin(yawt)
+    #     rot_matrix = torch.stack([torch.stack([c, -s]),torch.stack([s, c])])
+
+    rot_matrix = np.array(
+            [
+                [np.cos(yawt), -np.sin(yawt)],
+                [np.sin(yawt), np.cos(yawt)],
+            ]
+        )
+
+    roads_coords = roads_coords*zoom_fact
     centered_roadlines = (roads_coords - center_xy) @ rot_matrix + displacement
     centered_others = (XY.reshape(-1, 2)*zoom_fact - center_xy) @ rot_matrix + displacement
     centered_others = centered_others.reshape(XY.shape[0], n_channels, 2)
@@ -131,17 +168,10 @@ def rasterizer(
 
     tl_dict = get_tl_dict(tl_states_hist[:,-1], tl_ids, tl_valid_hist[:,-1])
 
-    RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines, roads_ids, tl_dict)
-
-
+    RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines, roads_ids, tl_dict, prerender=prerender)
 
     # Agents
-
-    
-
     unique_agent_ids = np.unique(agents_ids)
-
-    
 
     is_ego = False
     # self_type = 0
@@ -221,7 +251,9 @@ def rasterizer(
                     color=MAX_PIXEL_VALUE
                 )
 
-    raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)    
+    raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)   
+    raster = raster.transpose(2, 1, 0) / 255 
+    raster = raster.astype("float32")
 
     raster_dict = {
         "object_id": ego_id,
@@ -231,6 +263,8 @@ def rasterizer(
         "_gt_marginal": gt_xy,
         "gt_marginal": centered_gt,
         "future_val_marginal": future_val,
+        "agent_ind": ag,
+        "xy_ag": XY[ag]
         # "gt_joint": GT_XY[tracks_to_predict.flatten() > 0],
         # "future_val_joint": future_valid[tracks_to_predict.flatten() > 0],
         # "scenario_id": scenario_id,

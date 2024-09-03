@@ -15,7 +15,6 @@ torch.manual_seed(0)
 np.random.seed(0)
 
 inchannels = 10 #11
-# inchannels = 30
 
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
