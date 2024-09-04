@@ -75,7 +75,6 @@ class LightningModel(L.LightningModule):
         in_channels = hparams["in_channels"]
         time_limit = hparams["time_limit"]
         n_traj = hparams["n_traj"]
-        self.history = 10
 
         self.model = Model(model_name, in_channels=in_channels, time_limit=time_limit, n_traj=n_traj)
         
@@ -84,6 +83,9 @@ class LightningModel(L.LightningModule):
         self.sched = hparams["scheduler"]
         self.time_limit = hparams["time_limit"]
         self.loss_type = hparams["loss"]
+
+        self.history = 10
+        self.future_window = 10#self.time_limit
         
         self.transforms = transforms.Compose([
             transforms.RandomRotation(10),
@@ -217,17 +219,15 @@ class LightningModel(L.LightningModule):
 
         # print("Using device:", self.device)
 
-        curr = time.time()
+        # curr = time.time()
         
         x = batch["raster"]
         XY = batch["XY"]
         YAW = batch["YAWS"]
 
-        # print(type(x), type(XY), type(YAW), XY.is_cuda)
-
         loss = 0.
 
-        for tind in range(self.history-1,self.history-1+self.time_limit-1):
+        for tind in range(self.history-1,self.history-1+self.future_window-1):
 
             y = batch["gt_marginal"][:,tind-(self.history-1):]
             is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
@@ -250,7 +250,7 @@ class LightningModel(L.LightningModule):
         lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
         self.log("lr",lr)
 
-        print("Time:",time.time()-curr)
+        # print("Time:",time.time()-curr)
 
         return loss
 
@@ -263,7 +263,7 @@ class LightningModel(L.LightningModule):
 
         loss = 0.
 
-        for tind in range(self.history-1,self.history-1+self.time_limit-1):
+        for tind in range(self.history-1,self.history-1+self.future_window-1):
 
             y = batch["gt_marginal"][:,tind-(self.history-1):]
             is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
