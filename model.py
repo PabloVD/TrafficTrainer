@@ -7,6 +7,8 @@ import lightning as L
 import torchvision.transforms as transforms
 from losses import NLL_loss, L2_loss, L1_loss
 from data_utils.rasterizer import rasterizer
+# from data_utils.rasterizer_torch import rasterizer
+import time
 
 IMG_RES = 224
 center_ego = [IMG_RES//4, IMG_RES//2]
@@ -142,9 +144,9 @@ class LightningModel(L.LightningModule):
 
         return XY, YAW
     
-    def get_raster_input(self, x, batch, XY, YAW, tind):
+    def get_raster_input(self, batch, XY, YAW, tind):
 
-        x = torch.zeros_like(x)
+        x = torch.zeros_like(batch["raster"])
 
         for b in range(x.shape[0]):
 
@@ -171,16 +173,57 @@ class LightningModel(L.LightningModule):
                                         self.history,
                                         prerender=False)
             
-            x[b] = torch.Tensor(raster_dict["raster"])
+            x[b] = torch.tensor(raster_dict["raster"])
+
+        return x
+    
+    def get_raster_input_torch(self, batch, XY, YAW, tind):
+
+        x = torch.zeros_like(batch["raster"])
+
+        for b in range(x.shape[0]):
+
+            agents_data = {"agents_ids":batch["agents_ids"][b],
+                            "agents_valid":batch["agents_valid"][b],
+                            "XY":XY[b],
+                            "YAWS":YAW[b],
+                            "lengths":batch["lengths"][b],
+                            "widths":batch["widths"][b]}
+
+            roads_data = {"roads_ids":batch["roads_ids"][b],
+                            "roads_valid":batch["roads_valid"][b],
+                            "roads_coords":batch["roads_coords"][b]}
+            
+            tl_data = {"tl_ids":batch["tl_ids"][b],
+                        "tl_valid":batch["tl_valid"][b],
+                        "tl_states":batch["tl_states"][b]}
+            
+            raster_dict = rasterizer(batch["agent_ind"][b],
+                                        tind,
+                                        agents_data,
+                                        roads_data,
+                                        tl_data,
+                                        self.history,
+                                        device=self.device,
+                                        prerender=False,
+                                        )
+            
+            x[b] = torch.tensor(raster_dict["raster"], device=self.device)
 
         return x
 
 
     def training_step(self, batch, batch_idx):
+
+        # print("Using device:", self.device)
+
+        curr = time.time()
         
         x = batch["raster"]
         XY = batch["XY"]
         YAW = batch["YAWS"]
+
+        # print(type(x), type(XY), type(YAW), XY.is_cuda)
 
         loss = 0.
 
@@ -191,7 +234,8 @@ class LightningModel(L.LightningModule):
 
             if tind>self.history-1:
 
-                x = self.get_raster_input(x, batch, XY, YAW, tind)                
+                x = self.get_raster_input(batch, XY, YAW, tind)           
+                # x = self.get_raster_input_torch(batch, XY, YAW, tind)      
 
             # np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
 
@@ -205,6 +249,8 @@ class LightningModel(L.LightningModule):
         self.log("train_loss", loss)
         lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
         self.log("lr",lr)
+
+        print("Time:",time.time()-curr)
 
         return loss
 
@@ -224,7 +270,7 @@ class LightningModel(L.LightningModule):
 
             if tind>self.history-1:
 
-                x = self.get_raster_input(x, batch, XY, YAW, tind)                
+                x = self.get_raster_input(batch, XY, YAW, tind)                
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]
@@ -235,15 +281,6 @@ class LightningModel(L.LightningModule):
         self.log("val_loss", loss)
 
         return loss
-
-        # x, y, is_available = batch
-        # y = y[:,:self.time_limit]
-        # is_available = is_available[:,:self.time_limit]
-        # confidences_logits, logits = self.model(x)
-        # loss = self.loss(y, logits, confidences_logits, is_available)
-        # self.log("val_loss", loss, sync_dist=True)
-
-        # return loss
     
 
     # def test_step(self, batch, batch_idx):
