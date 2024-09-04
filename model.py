@@ -102,35 +102,43 @@ class LightningModel(L.LightningModule):
 
     def update_step(self, XY, YAW, confidences, logits, agind, currind):
 
-        # TO DO improve with array multiplication
-        for j in range(XY.shape[0]):
+        # Extract batch size
+        batch_size = XY.shape[0]
 
-            xy_ag = XY[j, agind[j]]
-            yaw_ag = YAW[j, agind[j]]
-
-            indmax = confidences[j].argmax()
-            # sortedtens, indices = torch.sort(confidences[j])
-            # indmax = indices[-2]
-
-            pred = logits[j,indmax]
-
-            currpos, curryaw = xy_ag[currind], yaw_ag[currind]*np.pi/180.
-
-            c = torch.cos(-curryaw)
-            s = torch.sin(-curryaw)
-            rot_matrix = torch.stack([torch.stack([c, -s]),torch.stack([s, c])])
+        arr = torch.arange(batch_size)
         
-            pred = pred@rot_matrix + currpos 
-
-            # Displace directly the vehicle to the predicted position
-            nextpos =  pred[0]
-
-            # Estimate orientation
-            diffpos = nextpos - currpos
-            newyaw = torch.arctan2(diffpos[1], diffpos[0])*180./np.pi
-
-            XY[j, agind[j],currind+1] = nextpos
-            YAW[j, agind[j],currind+1] = newyaw
+        # Gather the corresponding xy and yaw from each ego agent
+        xy_ag = XY[arr, agind]
+        yaw_ag = YAW[arr, agind]
+        
+        # Get the index of the maximum confidence for each row in the batch
+        indmax_batch = confidences.argmax(dim=1)
+        
+        # Gather the logits based on the indices obtained from the maximum confidences
+        pred = logits[arr, indmax_batch]
+        
+        # Get current position and yaw
+        currpos = xy_ag[:, currind]
+        curryaw = yaw_ag[:, currind]*np.pi/180.0
+        
+        # Calculate rotation matrix for each batch
+        c = torch.cos(-curryaw)
+        s = torch.sin(-curryaw)
+        rot_matrix = torch.stack([torch.stack([c, -s], dim=1), torch.stack([s, c], dim=1)], dim=1)  # shape: (batch_size, 2, 2)
+        
+        # Rotating and translating prediction
+        pred_rotated = torch.bmm(pred, rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
+        
+        # Displace directly the vehicle to the predicted position
+        nextpos = pred_rotated[:, 0]  # Take the first position from the prediction
+        
+        # Estimate orientation
+        diffpos = nextpos - currpos
+        newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])*180.0/np.pi
+        
+        # Update XY and YAW for the next step
+        XY[arr, agind, currind + 1] = nextpos
+        YAW[arr, agind, currind + 1] = newyaw
 
         return XY, YAW
     
