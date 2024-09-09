@@ -28,6 +28,9 @@ def export_model(modelname):
 
     torch.jit.save(script, "models/"+modelname+".pt")
 
+    model_loaded = torch.jit.load("models/"+modelname+".pt")
+    # print(model_loaded)
+
 def main():
 
     args = parse_args()

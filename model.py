@@ -6,8 +6,10 @@ from torch import optim, nn
 import lightning as L
 import torchvision.transforms as transforms
 from losses import NLL_loss, L2_loss, L1_loss
-from data_utils.rasterizer import rasterizer
-# from data_utils.rasterizer_torch import rasterizer
+# from data_utils.rasterizer import rasterizer
+from data_utils.rasterizer_torch import rasterizer_torch
+from data_utils.rasterizer_torch import get_rotation_matrix
+
 import time
 
 IMG_RES = 224
@@ -126,9 +128,7 @@ class LightningModel(L.LightningModule):
         curryaw = yaw_ag[:, currind]*np.pi/180.0
         
         # Calculate rotation matrix for each batch
-        c = torch.cos(-curryaw)
-        s = torch.sin(-curryaw)
-        rot_matrix = torch.stack([torch.stack([c, -s], dim=1), torch.stack([s, c], dim=1)], dim=1)  # shape: (batch_size, 2, 2)
+        rot_matrix = get_rotation_matrix(-curryaw)
         
         # Rotating and translating prediction
         pred_rotated = torch.bmm(pred, rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
@@ -180,47 +180,24 @@ class LightningModel(L.LightningModule):
         return x
     
     def get_raster_input_torch(self, batch, XY, YAW, tind):
-
-        x = torch.zeros_like(batch["raster"])
-
-        for b in range(x.shape[0]):
-
-            agents_data = {"agents_ids":batch["agents_ids"][b],
-                            "agents_valid":batch["agents_valid"][b],
-                            "XY":XY[b],
-                            "YAWS":YAW[b],
-                            "lengths":batch["lengths"][b],
-                            "widths":batch["widths"][b]}
-
-            roads_data = {"roads_ids":batch["roads_ids"][b],
-                            "roads_valid":batch["roads_valid"][b],
-                            "roads_coords":batch["roads_coords"][b]}
-            
-            tl_data = {"tl_ids":batch["tl_ids"][b],
-                        "tl_valid":batch["tl_valid"][b],
-                        "tl_states":batch["tl_states"][b]}
-            
-            raster_dict = rasterizer(batch["agent_ind"][b],
-                                        tind,
-                                        agents_data,
-                                        roads_data,
-                                        tl_data,
-                                        self.history,
-                                        device=self.device,
-                                        prerender=False,
-                                        )
-            
-            x[b] = torch.tensor(raster_dict["raster"], device=self.device)
+        
+        raster_dict = rasterizer_torch(tind,
+                                 batch,
+                                 XY,
+                                 YAW,
+                                 self.history,
+                                 device=self.device)
+        
+        x = torch.tensor(raster_dict["raster"], device=self.device)
 
         return x
 
 
     def training_step(self, batch, batch_idx):
 
-        # print("Using device:", self.device)
+        # starttime = time.time()
+        # rastertime = 0.
 
-        # curr = time.time()
-        
         x = batch["raster"]
         XY = batch["XY"]
         YAW = batch["YAWS"]
@@ -234,8 +211,12 @@ class LightningModel(L.LightningModule):
 
             if tind>self.history-1:
 
-                x = self.get_raster_input(batch, XY, YAW, tind)           
-                # x = self.get_raster_input_torch(batch, XY, YAW, tind)      
+                # rasterstarttime = time.time()
+
+                # x = self.get_raster_input(batch, XY, YAW, tind)           
+                x = self.get_raster_input_torch(batch, XY, YAW, tind)  
+                
+                # rastertime += time.time()-rasterstarttime
 
             # np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
 
@@ -250,7 +231,8 @@ class LightningModel(L.LightningModule):
         lr = self.trainer.lr_scheduler_configs[0].scheduler.get_last_lr()[0]
         self.log("lr",lr)
 
-        # print("Time:",time.time()-curr)
+        # tottime = time.time()-starttime
+        # print("Times [s]: Rasterization, Model, Total {:.2f}, {:.2f}, {:.2f}".format(rastertime,tottime-rastertime,tottime))
 
         return loss
 
@@ -270,7 +252,8 @@ class LightningModel(L.LightningModule):
 
             if tind>self.history-1:
 
-                x = self.get_raster_input(batch, XY, YAW, tind)                
+                # x = self.get_raster_input(batch, XY, YAW, tind)           
+                x = self.get_raster_input_torch(batch, XY, YAW, tind)            
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]

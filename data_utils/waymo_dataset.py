@@ -1,17 +1,19 @@
 import os
 import numpy as np
 from torch.utils.data import Dataset
-
+import glob
+from natsort import natsorted
 
 class WaymoLoader(Dataset):
     def __init__(self, directory, limit=0, return_vector=False, is_test=False):
-        files = os.listdir(directory)
-        self.files = [os.path.join(directory, f) for f in files if f.endswith(".npz")]
+        # files = os.listdir(directory)
+        # self.files = [os.path.join(directory, f) for f in files if f.endswith(".npz")]
+        self.files = natsorted(glob.glob(directory+"/*.npz"))
 
-        if limit > 0:
-            self.files = self.files[:limit]
-        else:
-            self.files = sorted(self.files)
+        # if limit > 0:
+        #     self.files = self.files[:limit]
+        # else:
+        #     self.files = sorted(self.files)
 
         self.return_vector = return_vector
         self.is_test = is_test
@@ -20,9 +22,12 @@ class WaymoLoader(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
+        
         filename = self.files[idx]
+        # print(filename, idx)
         
         data = np.load(filename, allow_pickle=True)
+
 
         # batch = {}
         # for key in data.keys():
