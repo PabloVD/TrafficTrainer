@@ -22,6 +22,8 @@ center_ego = [IMG_RES//4, IMG_RES//2]
 # else:
 #     os.system("rm "+outpath+"/*")
 
+use_rastertorch = True
+
 # CNN model
 class Model(nn.Module):
     def __init__(self, model_name, in_channels, time_limit, n_traj):
@@ -188,9 +190,7 @@ class LightningModel(L.LightningModule):
                                  self.history,
                                  device=self.device)
         
-        x = torch.tensor(raster_dict["raster"], device=self.device)
-
-        return x
+        return raster_dict["raster"]
 
 
     def training_step(self, batch, batch_idx):
@@ -201,6 +201,7 @@ class LightningModel(L.LightningModule):
         x = batch["raster"]
         XY = batch["XY"]
         YAW = batch["YAWS"]
+        # x2 = x.clone()
 
         loss = 0.
 
@@ -213,12 +214,15 @@ class LightningModel(L.LightningModule):
 
                 # rasterstarttime = time.time()
 
-                # x = self.get_raster_input(batch, XY, YAW, tind)           
-                x = self.get_raster_input_torch(batch, XY, YAW, tind)  
+                if use_rastertorch:        
+                    x = self.get_raster_input_torch(batch, XY, YAW, tind)
+                else:
+                    x = self.get_raster_input(batch, XY, YAW, tind)
                 
                 # rastertime += time.time()-rasterstarttime
 
-            # np.save(outpath+"/batch_"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
+            # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
+            # np.save(outpath+"/batch_debug_"+str(batch_idx)+"_time_"+str(tind),x2.cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]
@@ -252,8 +256,10 @@ class LightningModel(L.LightningModule):
 
             if tind>self.history-1:
 
-                # x = self.get_raster_input(batch, XY, YAW, tind)           
-                x = self.get_raster_input_torch(batch, XY, YAW, tind)            
+                if use_rastertorch:        
+                    x = self.get_raster_input_torch(batch, XY, YAW, tind)
+                else:
+                    x = self.get_raster_input(batch, XY, YAW, tind)           
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]

@@ -128,6 +128,8 @@ def rasterizer_torch(
     
     xy_val = xy
 
+    
+
     # print(XY.shape, xy_val.shape)
     # roads_coords = roads_coords[roads_valid > 0]
     # roads_ids = roads_ids[roads_valid > 0]
@@ -146,17 +148,21 @@ def rasterizer_torch(
     # centered_others = centered_others.reshape(XY.shape[0], n_channels, 2)
     centered_gt = torch.bmm( gt_xy - unscaled_center_xy.view(-1,1,2) , rot_matrix )
 
-    
-
     #print(centered_roadlines.shape, roads_ids.shape, tl_states_hist.shape, tl_ids.shape, tl_valid_hist.shape)
 
     centered_roadlines = centered_roadlines.cpu().detach().numpy()
     roads_ids = roads_ids.cpu().detach().numpy()
 
+    tl_states_curr, tl_ids, tl_valid_curr = tl_states_hist[:,:,-1].cpu().detach().numpy(), tl_ids.cpu().detach().numpy(), tl_valid_hist[:,:,-1].cpu().detach().numpy()
+
+    # tl_info = torch.cat([ tl_ids.view(batchsize,-1,1), tl_states_hist[:,:,-1].view(batchsize,-1,1) ], dim=-1)
+    # print(tl_info.shape)
+
     roadmaps = []
     for ag in range(batchsize):
 
-        tl_dict = get_tl_dict(tl_states_hist[ag,:,-1], tl_ids[ag], tl_valid_hist[ag,:,-1])
+        tl_dict = get_tl_dict(tl_states_curr[ag], tl_ids[ag], tl_valid_curr[ag])
+        # print("torch",ag,tl_dict["green"])
 
         RES_ROADMAP = (np.ones((raster_size, raster_size, 3), dtype=np.uint8) * MAX_PIXEL_VALUE)
         RES_ROADMAP = draw_roads(RES_ROADMAP, centered_roadlines[ag], roads_ids[ag], tl_dict)
@@ -168,7 +174,7 @@ def rasterizer_torch(
     agent_l = lengths
     agent_w = widths
 
-    box_points = torch.cat([
+    box_points_in = torch.cat([
                         -agent_l,
                         -agent_w,
                         agent_l,
@@ -178,7 +184,7 @@ def rasterizer_torch(
                         -agent_l,
                         agent_w
                         ],dim=-1)*zoom_fact/ 2
-    box_points = box_points.reshape(batchsize, maxags, 4, 2)
+    box_points_in = box_points_in.reshape(batchsize, maxags, 4, 2)
 
 
     ang = yaw_ego[:,-1].view(-1,1,1)-YAWS
@@ -187,15 +193,10 @@ def rasterizer_torch(
     
     for it in range(n_channels):
         rot_matrix_past = get_rotation_matrix(ang[:,:,it].view(-1))
-        #print(rot_matrix_past.shape)
-        box_points = torch.bmm(box_points.view(-1,4,2) , rot_matrix_past)
-        
+        box_points = torch.bmm(box_points_in.view(-1,4,2) , rot_matrix_past)        
         box_points = box_points + centered_others[:,:,it].view(-1,1,2)
         box_points = box_points.reshape(batchsize, maxags, 4, 2)
         boxptstot[:,:,it] = box_points
-
-
-    #box_ego = boxptstot[btchrng, agind]
 
     
     boxptstot = boxptstot.cpu().detach().numpy()
@@ -226,64 +227,10 @@ def rasterizer_torch(
             
     RES_OTHER = RES_OTHER - RES_EGO
 
-
-    # is_ego = False
-    # # self_type = 0
-    # for other_agent_id in unique_agent_ids:
-    #     other_agent_id = int(other_agent_id)
-    #     if other_agent_id < 1:
-    #         continue
-    #     if other_agent_id == ego_id:
-    #         is_ego = True
-    #         # self_type = agent_type[agents_ids == other_agent_id]
-    #     else:
-    #         is_ego = False
-
-    #     agent_lane = centered_others[agents_ids == other_agent_id][0]
-    #     agent_valid = agents_valid[agents_ids == other_agent_id]
-    #     agent_yaw = YAWS[agents_ids == other_agent_id]
-
-    #     agent_l = lengths[agents_ids == other_agent_id]
-    #     agent_w = widths[agents_ids == other_agent_id]
-
-    #     for timestamp, (coord, valid_coordinate, past_yaw,) in enumerate(
-    #         zip(
-    #             agent_lane,
-    #             agent_valid.flatten(),
-    #             agent_yaw.flatten(),
-    #         )
-    #     ):
-    #         if valid_coordinate == 0:
-    #             continue
-
-
-    #         _coord = coord.unsqueeze(0)
-            
-    #         yawt = yaw_ego[:,-1]            
-
-    #         rot_matrix_past = get_rotation_matrix(yawt - past_yaw)
-    #         box_points = box_points @ rot_matrix_past
-
-    #         box_points = box_points + _coord
-    #         box_points = box_points.reshape(1, -1, 2).to(torch.int32)
-
-    #         box_points = box_points.cpu().detach().numpy()
-
-
-    #         if is_ego:
-    #             cv2.fillPoly(
-    #                 RES_EGO[timestamp],
-    #                 box_points,
-    #                 color=MAX_PIXEL_VALUE
-    #             )
-    #         else:
-    #             cv2.fillPoly(
-    #                 RES_OTHER[timestamp],
-    #                 box_points,
-    #                 color=MAX_PIXEL_VALUE
-    #             )
-
     roadmaps = np.array(roadmaps).transpose(0, 3, 2, 1)
+    RES_EGO = RES_EGO.transpose(0, 1, 3, 2, 4)
+    RES_OTHER = RES_OTHER.transpose(0, 1, 3, 2, 4)
+
     roadmaps = torch.tensor(roadmaps,device=device)
     RES_EGO = torch.tensor(RES_EGO,device=device).squeeze(-1)
     RES_OTHER = torch.tensor(RES_OTHER,device=device).squeeze(-1)
