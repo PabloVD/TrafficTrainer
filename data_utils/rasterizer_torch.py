@@ -73,9 +73,7 @@ def rasterizer_torch(
         device="cpu",
         zoom_fact=zoom_fact,
         ):
-    
-    ag = batch["agent_ind"]
-        
+            
     agents_ids = batch["agents_ids"]
     agents_valid_split = batch["agents_valid"]
     XY_split = XYin
@@ -250,8 +248,8 @@ def rasterizer_torch(
         "_gt_marginal": gt_xy,
         "gt_marginal": centered_gt,
         "future_val_marginal": future_val,
-        "agent_ind": ag,
-        "xy_ag": XY[ag]
+        # "agent_ind": ag,
+        # "xy_ag": XY[ag]
         # "gt_joint": GT_XY[tracks_to_predict.flatten() > 0],
         # "future_val_joint": future_valid[tracks_to_predict.flatten() > 0],
         # "scenario_id": scenario_id,
