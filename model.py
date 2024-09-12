@@ -127,7 +127,7 @@ class LightningModel(L.LightningModule):
         
         # Get current position and yaw
         currpos = xy_ag[:, currind]
-        curryaw = yaw_ag[:, currind]*np.pi/180.0
+        curryaw = yaw_ag[:, currind]
         
         # Calculate rotation matrix for each batch
         rot_matrix = get_rotation_matrix(-curryaw)
@@ -140,7 +140,7 @@ class LightningModel(L.LightningModule):
         
         # Estimate orientation
         diffpos = nextpos - currpos
-        newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])*180.0/np.pi
+        newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
         
         # Update XY and YAW for the next step
         XY[arr, agind, currind + 1] = nextpos
