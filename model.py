@@ -107,27 +107,18 @@ class LightningModel(L.LightningModule):
         self.save_hyperparameters(hparams)
     
 
-    def update_step(self, XY, YAW, confidences, logits, agind, currind):
+    def next_step(self, currpos, curryaw, confidences, logits):
 
         # Extract batch size
-        batch_size = XY.shape[0]
-
+        batch_size = currpos.shape[0]
         arr = torch.arange(batch_size)
-        
-        # Gather the corresponding xy and yaw from each ego agent
-        xy_ag = XY[arr, agind]
-        yaw_ag = YAW[arr, agind]
         
         # Get the index of the maximum confidence for each row in the batch
         indmax_batch = confidences.argmax(dim=1)
         
         # Gather the logits based on the indices obtained from the maximum confidences
         pred = logits[arr, indmax_batch]
-        
-        # Get current position and yaw
-        currpos = xy_ag[:, currind]
-        curryaw = yaw_ag[:, currind]
-        
+
         # Calculate rotation matrix for each batch
         rot_matrix = get_rotation_matrix(-curryaw)
         
@@ -139,12 +130,20 @@ class LightningModel(L.LightningModule):
         
         # Estimate orientation
         # diffpos = nextpos - currpos
-        # newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
-        newyaw = pred[:,0,2] + curryaw
+        # nextyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        nextyaw = pred[:,0,2] + curryaw
+
+        return nextpos, nextyaw
+    
+    def update_step(self, XY, YAW, confidences_logits, logits, agind, tind):
         
-        # Update XY and YAW for the next step
-        XY[arr, agind, currind + 1] = nextpos
-        YAW[arr, agind, currind + 1] = newyaw
+        batch_size = XY.shape[0]
+        btchrng = torch.arange(batch_size)
+        currpos = XY[btchrng, agind, tind]
+        curryaw = YAW[btchrng, agind, tind]
+        nextpos, nextyaw = self.next_step(currpos, curryaw, confidences_logits, logits)
+        XY[btchrng, agind, tind + 1] = nextpos
+        YAW[btchrng, agind, tind + 1] = nextyaw
 
         return XY, YAW
     
