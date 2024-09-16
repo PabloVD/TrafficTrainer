@@ -32,7 +32,7 @@ class Model(nn.Module):
         self.time_limit = time_limit
 
         self.n_hidden = 2**11
-        self.n_out = self.n_traj * 2 * self.time_limit + self.n_traj
+        self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
         self.model = timm.create_model(
             model_name,
@@ -64,7 +64,7 @@ class Model(nn.Module):
             outputs[:, self.n_traj :],
         )
 
-        logits = logits.view(-1, self.n_traj, self.time_limit, 2)
+        logits = logits.view(-1, self.n_traj, self.time_limit, 3)
 
         return confidences_logits, logits
 
@@ -132,14 +132,15 @@ class LightningModel(L.LightningModule):
         rot_matrix = get_rotation_matrix(-curryaw)
         
         # Rotating and translating prediction
-        pred_rotated = torch.bmm(pred, rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
+        pred_rotated = torch.bmm(pred[:,:,:2], rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
         
         # Displace directly the vehicle to the predicted position
-        nextpos = pred_rotated[:, 0]  # Take the first position from the prediction
+        nextpos = pred_rotated[:,0]  # Take the first position from the prediction
         
         # Estimate orientation
-        diffpos = nextpos - currpos
-        newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        # diffpos = nextpos - currpos
+        # newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        newyaw = pred[:,0,2] + curryaw
         
         # Update XY and YAW for the next step
         XY[arr, agind, currind + 1] = nextpos
@@ -221,6 +222,14 @@ class LightningModel(L.LightningModule):
                 x = batch["raster"]
                 y = batch["gt_marginal"]
                 is_available = batch["future_val_marginal"]
+
+                batchsize = XY.shape[0]
+                btchrng = torch.arange(batchsize)
+                yaw_ego = YAW[btchrng, batch["agent_ind"]]
+                future_yaw = yaw_ego[:,tind+1:]
+                current_yaw = yaw_ego[:,tind]
+                future_yaw = future_yaw - current_yaw
+                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
   
             # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
@@ -264,6 +273,14 @@ class LightningModel(L.LightningModule):
                 x = batch["raster"]
                 y = batch["gt_marginal"]
                 is_available = batch["future_val_marginal"]    
+
+                batchsize = XY.shape[0]
+                btchrng = torch.arange(batchsize)
+                yaw_ego = YAW[btchrng, batch["agent_ind"]]
+                future_yaw = yaw_ego[:,tind+1:]
+                current_yaw = yaw_ego[:,tind]
+                future_yaw = future_yaw - current_yaw
+                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]

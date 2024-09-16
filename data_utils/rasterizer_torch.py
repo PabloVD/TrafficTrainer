@@ -145,6 +145,11 @@ def rasterizer_torch(
     # centered_others = centered_others.reshape(XY.shape[0], n_channels, 2)
     centered_gt = torch.bmm( gt_xy - unscaled_center_xy.view(-1,1,2) , rot_matrix )
 
+    future_yaw_all = YAWS_split[:,:,ind_curr+1:]
+    future_yaw = future_yaw_all[btchrng, agind]-yawt
+    centered_gt = torch.cat([centered_gt,future_yaw.unsqueeze(-1)],dim=-1)
+
+
     #print(centered_roadlines.shape, roads_ids.shape, tl_states_hist.shape, tl_ids.shape, tl_valid_hist.shape)
 
     centered_roadlines = centered_roadlines.cpu().detach().numpy()
