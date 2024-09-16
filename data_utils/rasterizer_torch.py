@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import torch
+# import kornia
 
 MAX_PIXEL_VALUE = 255
 N_ROADS = 21
@@ -13,6 +14,8 @@ color_to_rgb = { "red":(255,0,0), "yellow":(255,255,0),"green":(0,255,0) }
 
 raster_size = 224
 zoom_fact = 3.
+
+# use_kornia = True
 
 def draw_roads(roadmap, centered_roadlines, roads_ids, tl_dict):
 
@@ -101,10 +104,7 @@ def rasterizer_torch(
     tl_valid_hist = tl_valid_split[:,:,ind_curr-n_channels+1:ind_curr+1]
     tl_states_hist = tl_states_split[:,:,ind_curr-n_channels+1:ind_curr+1]
 
-    displacement = torch.tensor([[raster_size // 4, raster_size // 2]], device=device)
-
-    future_val = future_valid
-        
+    displacement = torch.tensor([[raster_size // 4, raster_size // 2]], device=device)        
     
     RES_EGO = np.zeros((batchsize, n_channels, raster_size, raster_size, 1) , dtype=np.uint8)
     RES_OTHER = np.zeros((batchsize, n_channels, raster_size, raster_size, 1) , dtype=np.uint8)
@@ -123,10 +123,9 @@ def rasterizer_torch(
     yaw_ego = YAWS[btchrng, agind]
     ego_id = agents_ids[btchrng, agind]
     gt_xy = GT_XY[btchrng, agind]
+    future_val = future_valid[btchrng, agind]
     
     xy_val = xy
-
-    
 
     # print(XY.shape, xy_val.shape)
     # roads_coords = roads_coords[roads_valid > 0]
@@ -196,12 +195,45 @@ def rasterizer_torch(
         box_points = box_points.reshape(batchsize, maxags, 4, 2)
         boxptstot[:,:,it] = box_points
 
+    # if use_kornia:
+
+    #     ego_map = torch.zeros((batchsize, n_channels, raster_size, raster_size),device=device,dtype=torch.uint8)
+    #     others_map = torch.zeros((batchsize, n_channels, raster_size, raster_size),device=device,dtype=torch.uint8)
+    #     col = MAX_PIXEL_VALUE*torch.ones((batchsize,1),device=device,dtype=torch.uint8)
+    #     # col = MAX_PIXEL_VALUE*torch.ones((batchsize*n_channels,1),device=device,dtype=torch.uint8)
+
+    #     boxptstot = boxptstot.to(torch.uint8)
+    #     egobox = boxptstot[btchrng, agind]
+
+    #     # print(ego_map.shape, egobox.shape)
+
+    #     # img = kornia.utils.draw_convex_polygon(ego_map.view(batchsize*n_channels,1,raster_size, raster_size), egobox.view(batchsize*n_channels,4,2), colors=col)
+    #     # ego_map = img.view(batchsize, n_channels, raster_size, raster_size)
+
+    #     for it in range(n_channels):
+    #         ego_map[:,it:it+1] = kornia.utils.draw_convex_polygon(ego_map[:,it:it+1], egobox[:,it], colors=col)
+        
+    #         # for ib in range(batchsize):
+    #         #     print(others_map[ib:ib+1,it:it+1].shape, boxptstot[ib,:,it].shape, col.shape)
+    #         #     others_map[ib:ib+1,it:it+1] = kornia.utils.draw_convex_polygon(others_map[ib:ib+1,it:it+1], [box for box in boxptstot[ib,:,it]], colors=col[ib:ib+1])
+    #         # for ib in range(boxptstot.shape[1]):
+    #         #     #print(others_map[ib:ib+1,it:it+1].shape, boxptstot[ib,:,it].shape, col.shape)
+    #         #     others_map[:,it:it+1] = kornia.utils.draw_convex_polygon(others_map[:,it:it+1], boxptstot[:,ib,it], colors=col)
+
+    #     RES_EGO = ego_map
+    #     # RES_OTHER = others_map
+
+    # RES_EGO = RES_EGO.unsqueeze(-1).cpu().detach().numpy()
+    # np.save("ego",RES_EGO)
+
+    #else:
     
     boxptstot = boxptstot.cpu().detach().numpy()
     agind_np = agind.cpu().detach().numpy()
     boxptstot = boxptstot.astype(np.int32)
 
-    
+    # print(RES_EGO.shape, boxptstot.shape, boxptstot[np.arange(batchsize), agind_np].shape)
+
     for it in range(n_channels):
         box_points = boxptstot[:,:,it]
         box_ego = box_points[np.arange(batchsize), agind_np]
@@ -216,22 +248,24 @@ def rasterizer_torch(
                 box_ego[ag].reshape(1,-1,2),
                 color=MAX_PIXEL_VALUE
                 )
-            #for agg in range(128):
             cv2.fillPoly(
                 RES_OTHER[ag,it],
                 box_points[ag],
                 color=MAX_PIXEL_VALUE
                 )
-            
+        
+    RES_EGO = RES_EGO.transpose(0, 1, 3, 2, 4)
+    RES_OTHER = RES_OTHER.transpose(0, 1, 3, 2, 4)
+    RES_EGO = torch.tensor(RES_EGO,device=device).squeeze(-1)
+    RES_OTHER = torch.tensor(RES_OTHER,device=device).squeeze(-1)
+
+    # print(RES_OTHER.max(), RES_EGO.max())
+                
     RES_OTHER = RES_OTHER - RES_EGO
 
     roadmaps = np.array(roadmaps).transpose(0, 3, 2, 1)
-    RES_EGO = RES_EGO.transpose(0, 1, 3, 2, 4)
-    RES_OTHER = RES_OTHER.transpose(0, 1, 3, 2, 4)
-
     roadmaps = torch.tensor(roadmaps,device=device)
-    RES_EGO = torch.tensor(RES_EGO,device=device).squeeze(-1)
-    RES_OTHER = torch.tensor(RES_OTHER,device=device).squeeze(-1)
+    
     raster = torch.cat([roadmaps, RES_EGO, RES_OTHER],dim=1)
 
     # raster = np.concatenate([RES_ROADMAP] + RES_EGO + RES_OTHER, axis=2)   
@@ -248,10 +282,6 @@ def rasterizer_torch(
         "_gt_marginal": gt_xy,
         "gt_marginal": centered_gt,
         "future_val_marginal": future_val,
-        # "agent_ind": ag,
-        # "xy_ag": XY[ag]
-        # "gt_joint": GT_XY[tracks_to_predict.flatten() > 0],
-        # "future_val_joint": future_valid[tracks_to_predict.flatten() > 0],
         # "scenario_id": scenario_id,
         # "self_type": self_type,
     }
