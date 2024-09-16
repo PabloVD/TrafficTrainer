@@ -146,7 +146,7 @@ def rasterizer_torch(
     centered_gt = torch.bmm( gt_xy - unscaled_center_xy.view(-1,1,2) , rot_matrix )
 
     future_yaw_all = YAWS_split[:,:,ind_curr+1:]
-    future_yaw = future_yaw_all[btchrng, agind]-yawt
+    future_yaw = future_yaw_all[btchrng, agind]-yawt.view(-1,1)
     centered_gt = torch.cat([centered_gt,future_yaw.unsqueeze(-1)],dim=-1)
 
 
