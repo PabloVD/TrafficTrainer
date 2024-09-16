@@ -227,7 +227,7 @@ class LightningModel(L.LightningModule):
                 yaw_ego = YAW[btchrng, batch["agent_ind"]]
                 future_yaw = yaw_ego[:,tind+1:]
                 current_yaw = yaw_ego[:,tind]
-                future_yaw = future_yaw - current_yaw
+                future_yaw = future_yaw - current_yaw.view(-1,1)
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
   
             # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
@@ -278,7 +278,7 @@ class LightningModel(L.LightningModule):
                 yaw_ego = YAW[btchrng, batch["agent_ind"]]
                 future_yaw = yaw_ego[:,tind+1:]
                 current_yaw = yaw_ego[:,tind]
-                future_yaw = future_yaw - current_yaw
+                future_yaw = future_yaw - current_yaw.view(-1,1)
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
             confidences_logits, logits = self.model(x)
