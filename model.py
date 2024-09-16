@@ -22,7 +22,6 @@ center_ego = [IMG_RES//4, IMG_RES//2]
 # else:
 #     os.system("rm "+outpath+"/*")
 
-use_rastertorch = True
 
 # CNN model
 class Model(nn.Module):
@@ -190,7 +189,7 @@ class LightningModel(L.LightningModule):
                                  self.history,
                                  device=self.device)
         
-        return raster_dict["raster"]
+        return raster_dict
 
 
     def training_step(self, batch, batch_idx):
@@ -198,34 +197,36 @@ class LightningModel(L.LightningModule):
         # starttime = time.time()
         # rastertime = 0.
 
-        x = batch["raster"]
+        
         XY = batch["XY"]
         YAW = batch["YAWS"]
-        # x2 = x.clone()
 
         loss = 0.
 
         for tind in range(self.history-1,self.history-1+self.future_window-1):
 
-            y = batch["gt_marginal"][:,tind-(self.history-1):]
-            is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
-
             if tind>self.history-1:
 
                 # rasterstarttime = time.time()
 
-                if use_rastertorch:        
-                    x = self.get_raster_input_torch(batch, XY, YAW, tind)
-                else:
-                    x = self.get_raster_input(batch, XY, YAW, tind)
+                raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
+                x = raster_dict["raster"]
+                y = raster_dict["gt_marginal"]
+                is_available = raster_dict["future_val_marginal"]
                 
                 # rastertime += time.time()-rasterstarttime
 
-            # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x.cpu().detach().numpy())
-            # np.save(outpath+"/batch_debug_"+str(batch_idx)+"_time_"+str(tind),x2.cpu().detach().numpy())
+            else:
+                # first batch, no need to rasterize
+                x = batch["raster"]
+                y = batch["gt_marginal"]
+                is_available = batch["future_val_marginal"]
+  
+            # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]
+    
             loss += self.loss(y, logits, confidences_logits, is_available)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
@@ -243,7 +244,7 @@ class LightningModel(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
 
-        x = batch["raster"]
+        
         XY = batch["XY"]
         YAW = batch["YAWS"]
 
@@ -251,15 +252,18 @@ class LightningModel(L.LightningModule):
 
         for tind in range(self.history-1,self.history-1+self.future_window-1):
 
-            y = batch["gt_marginal"][:,tind-(self.history-1):]
-            is_available = batch["future_val_marginal"][:,tind-(self.history-1):]
-
             if tind>self.history-1:
 
-                if use_rastertorch:        
-                    x = self.get_raster_input_torch(batch, XY, YAW, tind)
-                else:
-                    x = self.get_raster_input(batch, XY, YAW, tind)           
+                raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
+                x = raster_dict["raster"]
+                y = raster_dict["gt_marginal"]
+                is_available = raster_dict["future_val_marginal"]
+
+            else:
+                # first batch, no need to rasterize
+                x = batch["raster"]
+                y = batch["gt_marginal"]
+                is_available = batch["future_val_marginal"]    
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,tind-(self.history-1):]
