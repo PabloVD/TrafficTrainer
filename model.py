@@ -107,27 +107,18 @@ class LightningModel(L.LightningModule):
         self.save_hyperparameters(hparams)
     
 
-    def update_step(self, XY, YAW, confidences, logits, agind, currind):
+    def next_step(self, currpos, curryaw, confidences, logits):
 
         # Extract batch size
-        batch_size = XY.shape[0]
-
+        batch_size = currpos.shape[0]
         arr = torch.arange(batch_size)
-        
-        # Gather the corresponding xy and yaw from each ego agent
-        xy_ag = XY[arr, agind]
-        yaw_ag = YAW[arr, agind]
         
         # Get the index of the maximum confidence for each row in the batch
         indmax_batch = confidences.argmax(dim=1)
         
         # Gather the logits based on the indices obtained from the maximum confidences
         pred = logits[arr, indmax_batch]
-        
-        # Get current position and yaw
-        currpos = xy_ag[:, currind]
-        curryaw = yaw_ag[:, currind]
-        
+
         # Calculate rotation matrix for each batch
         rot_matrix = get_rotation_matrix(-curryaw)
         
@@ -135,15 +126,24 @@ class LightningModel(L.LightningModule):
         pred_rotated = torch.bmm(pred, rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
         
         # Displace directly the vehicle to the predicted position
-        nextpos = pred_rotated[:, 0]  # Take the first position from the prediction
+        nextpos = pred_rotated[:,0]  # Take the first position from the prediction
         
         # Estimate orientation
         diffpos = nextpos - currpos
-        newyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        nextyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        # nextyaw = pred[:,0,2] + curryaw
+
+        return nextpos, nextyaw
+    
+    def update_step(self, XY, YAW, confidences_logits, logits, agind, tind):
         
-        # Update XY and YAW for the next step
-        XY[arr, agind, currind + 1] = nextpos
-        YAW[arr, agind, currind + 1] = newyaw
+        batch_size = XY.shape[0]
+        btchrng = torch.arange(batch_size)
+        currpos = XY[btchrng, agind, tind]
+        curryaw = YAW[btchrng, agind, tind]
+        nextpos, nextyaw = self.next_step(currpos, curryaw, confidences_logits, logits)
+        XY[btchrng, agind, tind + 1] = nextpos
+        YAW[btchrng, agind, tind + 1] = nextyaw
 
         return XY, YAW
     
@@ -225,8 +225,7 @@ class LightningModel(L.LightningModule):
             # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
-            logits = logits[:,:,tind-(self.history-1):]
-    
+            logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
@@ -266,7 +265,7 @@ class LightningModel(L.LightningModule):
                 is_available = batch["future_val_marginal"]    
 
             confidences_logits, logits = self.model(x)
-            logits = logits[:,:,tind-(self.history-1):]
+            logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
