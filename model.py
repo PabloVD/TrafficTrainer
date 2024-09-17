@@ -233,8 +233,7 @@ class LightningModel(L.LightningModule):
             # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
-            logits = logits[:,:,tind-(self.history-1):]
-    
+            logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
@@ -282,7 +281,7 @@ class LightningModel(L.LightningModule):
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
             confidences_logits, logits = self.model(x)
-            logits = logits[:,:,tind-(self.history-1):]
+            logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
