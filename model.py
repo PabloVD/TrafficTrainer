@@ -106,7 +106,7 @@ class LightningModel(L.LightningModule):
 
         self.save_hyperparameters(hparams)
     
-
+    @torch.jit.export
     def next_step(self, currpos, curryaw, confidences, logits):
 
         # Extract batch size
