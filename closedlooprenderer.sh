@@ -8,10 +8,10 @@ python3 data_utils/closedlooprenderer.py \
 
 #python3 data_utils/closedlooprenderer.py \
 #    --data "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/Waymo_tf_example_train" \
-#    --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_train_fixed
+#    --out "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/WaymoPrerendered/rendered_train_fixed"
     
 #python3 data_utils/closedlooprenderer.py \
 #    --data "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/Waymo_tf_example_valid" \
-#    --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_valid_fixed \
+#    --out "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/WaymoPrerendered/rendered_valid_fixed" \
 #    --use-vectorize
 

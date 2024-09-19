@@ -4,6 +4,7 @@ from model import LightningModel
 import argparse
 import yaml
 import glob
+import inspect
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -23,13 +24,26 @@ def export_model(modelname):
 
     print("Loading from checkpoint",checkpoint)
     model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, hparams=hparams, map_location='cuda:0').cuda().eval()
+
+    pos, yaw = torch.rand((10,2)), torch.rand((10))
+    confs, logits = torch.rand((10,6)), torch.rand((10,6,20,3))
   
     script = model.to_torchscript()
+
+    #print(script.next_step(pos, yaw, confs, logits))
+    # print(script.lr)
 
     torch.jit.save(script, "models/"+modelname+".pt")
 
     model_loaded = torch.jit.load("models/"+modelname+".pt")
     # print(model_loaded)
+    # print(inspect.getmembers(model_loaded, predicate=inspect.ismethod))
+    print(model_loaded.lr)
+    print(model_loaded.next_step(pos, yaw, confs, logits))
+    # methods = sorted(dir(model_loaded.model.model))
+    # for m in methods:
+    #     print(m)
+    print(model.rasterizer)
 
 def main():
 

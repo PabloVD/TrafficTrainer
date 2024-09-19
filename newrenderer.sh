@@ -6,11 +6,12 @@ python3 newrenderer.py \
     --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered \
     --use-vectorize \
 
-python3 newrenderer.py \
-    --data "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/Waymo_tf_example_train" \
-    --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_train_fixed
+#python3 newrenderer.py \
+#    --data "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/Waymo_tf_example_train" \
+#    --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_train_fixed
     
 python3 newrenderer.py \
     --data "/media/tda/Crucial X6/PabloComputer/TrafficGenerationDatasets/Waymo_tf_example_valid" \
     --out /home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_valid_fixed \
+    --use-vectorize
 

@@ -26,7 +26,7 @@ python3 lightning_train.py \
     --val-data ${DATAPATH}rendered_valid_${FRAME} \
     --model ${MODEL_NAME}  \
     --loss ${LOSS} \
-    --save_path ./logs/${LOSS}_${TIME_LIMIT} \
+    --save_path ./logs/${LOSS}_${TIME_LIMIT}_${MODEL_NAME} \
     --in-channels 25 \
     --time-limit ${TIME_LIMIT} \
     --n-traj 6 \
