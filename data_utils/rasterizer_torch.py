@@ -1,5 +1,3 @@
-# TO DO: 
-# - Create class with all methods and attributes, e.g. self.batchsize
 import cv2
 import numpy as np
 import torch

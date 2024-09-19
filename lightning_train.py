@@ -6,12 +6,11 @@ from model import LightningModel
 from data_utils.waymo_dataset import WaymoLoader
 import glob
 from natsort import natsorted
-#from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 torch.set_float32_matmul_precision('medium')
 
-IN_CHANNELS = 25
+IN_CHANNELS = 23
 TL = 80
 N_TRAJS = 6
 DEVICE = "gpu"
@@ -108,10 +107,6 @@ def main():
     hparams["weight_decay"] = args.wd
     print(hparams)
 
-    # WandB logger
-    # wandb_logger = WandbLogger(project='TrafficTrainer')
-    # wandb_logger.experiment.config["batch_size"] = batch_size
-    # wandb_logger.experiment.config["model_name"] = model_name
 
     # Training dataloader
     train_dataset = WaymoLoader(train_path)
@@ -129,7 +124,7 @@ def main():
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
         persistent_workers=True,

@@ -4,7 +4,6 @@ from model import LightningModel
 import argparse
 import yaml
 import glob
-import inspect
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -37,12 +36,9 @@ def export_model(modelname):
 
     model_loaded = torch.jit.load("models/"+modelname+".pt")
     # print(model_loaded)
-    # print(inspect.getmembers(model_loaded, predicate=inspect.ismethod))
+    # Test that some methods are correctly exported
     print(model_loaded.lr)
     print(model_loaded.next_step(pos, yaw, confs, logits))
-    # methods = sorted(dir(model_loaded.model.model))
-    # for m in methods:
-    #     print(m)
     print(model.rasterizer)
 
 def main():

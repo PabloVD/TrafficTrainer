@@ -5,11 +5,9 @@ import glob
 from tqdm import tqdm
 import os
 import torch
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from data_utils.waymo_dataset import WaymoLoader
 import random
-# from data_utils.rasterizer_torch import get_rotation_matrix, zoom_fact, raster_size
 
 random.seed(0)
 torch.manual_seed(0)
@@ -18,11 +16,10 @@ np.random.seed(0)
 raster_size = 224
 displacement = torch.tensor([[raster_size // 4, raster_size // 2]])
 zoom_fact = 3.
-inchannels = 10 #11
+inchannels = 10
 
 device="cpu"
 
-# modelname = "models/NLL_20_vit_base_patch16_224_16.pt"
 modelname = "models/NLL_20_vit_base_patch16_224_predyaw_5.pt"
 
 # Load model
@@ -53,11 +50,8 @@ def raster2rgb(raster, i):
 
     return img
 
-fixed_frame = True
-#fixed_frame = False
 
 filenames = sorted(glob.glob("/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/tests_prerendered/vehicle_*"))
-#filenames = sorted(glob.glob("/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/rendered_valid_fixed/vehicle_*"))
 #filenames = filenames[:10]
 
 outpath = "/home/tda/CARLA/TrafficGeneration/vis_tests/"
@@ -100,17 +94,8 @@ def show_gt(data, ind):
     img = raster2rgb(raster, inchannels-1)
     plt.imshow(img)
 
-    y = data["gt_marginal"]#.squeeze(0)
-    # posego = XY[btchrng, agind]
-    # currpos = posego[:,inchannels-1]
-    # yawego = YAWS[btchrng, agind]
-    # yaw_curr = yawego[:,inchannels-1]
-    # rot_matrix = get_rotation_matrix(-yaw_curr)
+    y = data["gt_marginal"]
     y = y*is_available.view(-1,20,1)
-
-    # print(y.shape, is_available.shape)
-
-    # y = torch.bmm(y, rot_matrix)*zoom_fact + displacement # shape: (batch_size, 10, 2)
     y = y*zoom_fact + displacement
 
     y = y.squeeze(0)
