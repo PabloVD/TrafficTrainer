@@ -3,24 +3,23 @@ import numpy as np
 import timm
 import torch
 from torch import optim, nn
-import lightning as L
-import torchvision.transforms as transforms
+from lightning import LightningModule
 from losses import NLL_loss, L2_loss, L1_loss
-# from data_utils.rasterizer import rasterizer
-from data_utils.rasterizer_torch import rasterizer_torch
+from data_utils.rasterizer_torch import Rasterizer
 from data_utils.rasterizer_torch import get_rotation_matrix
 
 import time
 
-IMG_RES = 224
-center_ego = [IMG_RES//4, IMG_RES//2]
 
-# import os
-# outpath = "rendertests"
-# if not os.path.exists(outpath):
-#     os.system("mkdir "+outpath)
-# else:
-#     os.system("rm "+outpath+"/*")
+debug = False
+
+if debug:
+    import os
+    outpath = "rendertests"
+    if not os.path.exists(outpath):
+        os.system("mkdir "+outpath)
+    else:
+        os.system("rm "+outpath+"/*")
 
 
 # CNN model
@@ -32,7 +31,7 @@ class Model(nn.Module):
         self.time_limit = time_limit
 
         self.n_hidden = 2**11
-        self.n_out = self.n_traj * 2 * self.time_limit + self.n_traj
+        self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
         self.model = timm.create_model(
             model_name,
@@ -40,19 +39,6 @@ class Model(nn.Module):
             in_chans=in_channels,
             num_classes=self.n_out,
         )
-
-        # self.head = nn.Sequential(
-        #     nn.Dropout(0.5),
-        #     nn.Linear(self.n_hidden, self.n_hidden),
-        #     nn.ReLU(),
-        #     nn.Dropout(0.5),
-        #     nn.Linear(self.n_hidden, self.n_out)
-        # )
-
-        # self.model = nn.Sequential(
-        #     self.backbone,
-        #     self.head
-        # )
 
 
     def forward(self, x):
@@ -64,13 +50,13 @@ class Model(nn.Module):
             outputs[:, self.n_traj :],
         )
 
-        logits = logits.view(-1, self.n_traj, self.time_limit, 2)
+        logits = logits.view(-1, self.n_traj, self.time_limit, 3)
 
         return confidences_logits, logits
 
 
 # Lightning Module
-class LightningModel(L.LightningModule):
+class LightningModel(LightningModule):
     def __init__(self, hparams):
         super().__init__()
 
@@ -89,11 +75,6 @@ class LightningModel(L.LightningModule):
 
         self.history = 10
         self.future_window = 10#self.time_limit
-        
-        self.transforms = transforms.Compose([
-            transforms.RandomRotation(10),
-            transforms.RandomResizedCrop(size=(IMG_RES, IMG_RES),scale=(0.95,1.)),
-        ])
 
         if self.loss_type=="NLL":
             self.loss = NLL_loss()
@@ -105,6 +86,8 @@ class LightningModel(L.LightningModule):
             print("Loss not valid")
 
         self.save_hyperparameters(hparams)
+
+        self.rasterizer = Rasterizer(zoom_fact = 3.)
     
     @torch.jit.export
     def next_step(self, currpos, curryaw, confidences, logits):
@@ -129,9 +112,9 @@ class LightningModel(L.LightningModule):
         nextpos = pred_rotated[:,0]  # Take the first position from the prediction
         
         # Estimate orientation
-        diffpos = nextpos - currpos
-        nextyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
-        # nextyaw = pred[:,0,2] + curryaw
+        # diffpos = nextpos - currpos
+        # nextyaw = torch.atan2(diffpos[:, 1], diffpos[:, 0])
+        nextyaw = pred[:,0,2] + curryaw
 
         return nextpos, nextyaw
     
@@ -147,42 +130,10 @@ class LightningModel(L.LightningModule):
 
         return XY, YAW
     
-    def get_raster_input(self, batch, XY, YAW, tind):
-
-        x = torch.zeros_like(batch["raster"])
-
-        for b in range(x.shape[0]):
-
-            agents_data = {"agents_ids":batch["agents_ids"][b].cpu().detach().numpy(),
-                            "agents_valid":batch["agents_valid"][b].cpu().detach().numpy(),
-                            "XY":XY[b].cpu().detach().numpy(),
-                            "YAWS":YAW[b].cpu().detach().numpy(),
-                            "lengths":batch["lengths"][b].cpu().detach().numpy(),
-                            "widths":batch["widths"][b].cpu().detach().numpy()}
-
-            roads_data = {"roads_ids":batch["roads_ids"][b].cpu().detach().numpy(),
-                            "roads_valid":batch["roads_valid"][b].cpu().detach().numpy(),
-                            "roads_coords":batch["roads_coords"][b].cpu().detach().numpy()}
-            
-            tl_data = {"tl_ids":batch["tl_ids"][b].cpu().detach().numpy(),
-                        "tl_valid":batch["tl_valid"][b].cpu().detach().numpy(),
-                        "tl_states":batch["tl_states"][b].cpu().detach().numpy()}
-            
-            raster_dict = rasterizer(batch["agent_ind"][b].cpu(),
-                                        tind,
-                                        agents_data,
-                                        roads_data,
-                                        tl_data,
-                                        self.history,
-                                        prerender=False)
-            
-            x[b] = torch.tensor(raster_dict["raster"])
-
-        return x
     
     def get_raster_input_torch(self, batch, XY, YAW, tind):
         
-        raster_dict = rasterizer_torch(tind,
+        raster_dict = self.rasterizer.get_training_dict(tind,
                                  batch,
                                  XY,
                                  YAW,
@@ -221,8 +172,16 @@ class LightningModel(L.LightningModule):
                 x = batch["raster"]
                 y = batch["gt_marginal"]
                 is_available = batch["future_val_marginal"]
+
+                batchsize = XY.shape[0]
+                btchrng = torch.arange(batchsize)
+                yaw_ego = YAW[btchrng, batch["agent_ind"]]
+                future_yaw = yaw_ego[:,tind+1:]
+                current_yaw = yaw_ego[:,tind]
+                future_yaw = future_yaw - current_yaw.view(-1,1)
+                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
   
-            # np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
+            if debug: np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
@@ -264,6 +223,14 @@ class LightningModel(L.LightningModule):
                 y = batch["gt_marginal"]
                 is_available = batch["future_val_marginal"]    
 
+                batchsize = XY.shape[0]
+                btchrng = torch.arange(batchsize)
+                yaw_ego = YAW[btchrng, batch["agent_ind"]]
+                future_yaw = yaw_ego[:,tind+1:]
+                current_yaw = yaw_ego[:,tind]
+                future_yaw = future_yaw - current_yaw.view(-1,1)
+                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+
             confidences_logits, logits = self.model(x)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
@@ -274,17 +241,6 @@ class LightningModel(L.LightningModule):
 
         return loss
     
-
-    # def test_step(self, batch, batch_idx):
-
-    #     x, y, is_available = batch
-    #     y = y[:,:self.time_limit]
-    #     is_available = is_available[:,:self.time_limit]
-    #     confidences_logits, logits = self.model(x)
-    #     loss = self.loss(y, logits, confidences_logits, is_available)
-    #     self.log("test_loss", loss, sync_dist=True)
-
-    #     return loss
 
 
     def configure_optimizers(self):
