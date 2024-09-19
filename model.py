@@ -106,7 +106,7 @@ class LightningModel(L.LightningModule):
 
         self.save_hyperparameters(hparams)
     
-
+    @torch.jit.export
     def next_step(self, currpos, curryaw, confidences, logits):
 
         # Extract batch size
@@ -123,7 +123,7 @@ class LightningModel(L.LightningModule):
         rot_matrix = get_rotation_matrix(-curryaw)
         
         # Rotating and translating prediction
-        pred_rotated = torch.bmm(pred, rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
+        pred_rotated = torch.bmm(pred[:,:,:2], rot_matrix) + currpos.unsqueeze(1)  # shape: (batch_size, 10, 2)
         
         # Displace directly the vehicle to the predicted position
         nextpos = pred_rotated[:,0]  # Take the first position from the prediction
