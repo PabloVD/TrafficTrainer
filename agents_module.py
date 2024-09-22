@@ -59,7 +59,7 @@ class AgentsModule(torch.nn.Module):
         x_agents = self.mlp_states_agents(x_agents)
 
         # Sum all agents activations in the agents channels per each batch
-        mat = torch.ones(agsshape[0],1,agsshape[1])
+        mat = torch.ones(agsshape[0],1,agsshape[1],device=x_agents.device)
         x_agents = torch.bmm(mat,x_agents).squeeze(1)
 
         out = torch.cat([x_ego, x_agents],dim=-1)

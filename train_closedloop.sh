@@ -8,7 +8,7 @@ export DATAVALID=${DATAPATH}rendered_train_fixed
 
 #export MODEL_NAME="resnet18"
 #export MODEL_NAME="xception71"
-export MODEL_NAME="vit_base_patch16_224"
+export MODEL_NAME="vit_large_patch32_224"
 
 export LR=0.0001
 
@@ -28,7 +28,7 @@ python3 lightning_train.py \
     --val-data ${DATAVALID} \
     --model ${MODEL_NAME}  \
     --loss ${LOSS} \
-    --save_path ./logs/${LOSS}_${TIME_LIMIT}_${MODEL_NAME} \
+    --save_path ./logs/${LOSS}_${TIME_LIMIT}_${MODEL_NAME}_mlps \
     --in-channels 23 \
     --time-limit ${TIME_LIMIT} \
     --n-traj 6 \

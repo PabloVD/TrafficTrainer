@@ -33,7 +33,7 @@ class Model(nn.Module):
 
         self.n_out_map = 1024
         self.n_out_agents = 1024
-        self.n_hidden = self.n_out_map + self.n_out_agents
+        self.n_hidden = self.n_out_map + 2*self.n_out_agents
         self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
         self.map_module = timm.create_model(
@@ -59,7 +59,7 @@ class Model(nn.Module):
             nn.Linear(self.n_hidden//2, self.n_hidden//4),
             nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(self.n_hidden, self.n_out)
+            nn.Linear(self.n_hidden//4, self.n_out)
         )
 
 
