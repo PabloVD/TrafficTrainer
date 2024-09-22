@@ -31,9 +31,9 @@ class Model(nn.Module):
         self.n_traj = n_traj
         self.time_limit = time_limit
 
-        
-        self.n_out_map = 512
-        self.n_hidden = self.n_out_map + 640
+        self.n_out_map = 1024
+        self.n_out_agents = 1024
+        self.n_hidden = self.n_out_map + self.n_out_agents
         self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
         self.map_module = timm.create_model(
@@ -43,17 +43,20 @@ class Model(nn.Module):
             num_classes=self.n_out_map,
         )
 
-        self.agents_module = AgentsModule()
+        self.agents_module = AgentsModule(self.n_out_agents)
 
         self.head = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_hidden),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_hidden),
+            nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(self.n_hidden, self.n_hidden//2),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(self.n_hidden//2, self.n_hidden//4),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(self.n_hidden//4, self.n_hidden//8),
             nn.ReLU(),
             nn.Dropout(0.5),
             nn.Linear(self.n_hidden, self.n_out)
@@ -67,7 +70,7 @@ class Model(nn.Module):
 
         out_agents = self.agents_module(x_ego, bb_ego, x_agents, bb_agents)
 
-        out_tot = torch.cat([out_map,out_agents],dim=-1)
+        out_tot = torch.cat([out_map, out_agents],dim=-1)
 
         outputs = self.head(out_tot)
 
