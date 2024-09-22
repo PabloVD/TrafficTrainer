@@ -7,6 +7,7 @@ from lightning import LightningModule
 from losses import NLL_loss, L2_loss, L1_loss
 from data_utils.rasterizer_torch import Rasterizer
 from data_utils.rasterizer_torch import get_rotation_matrix
+from agents_module import AgentsModule
 
 import time
 
@@ -30,20 +31,45 @@ class Model(nn.Module):
         self.n_traj = n_traj
         self.time_limit = time_limit
 
-        self.n_hidden = 2**11
+        
+        self.n_out_map = 512
+        self.n_hidden = self.n_out_map + 640
         self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
-        self.model = timm.create_model(
+        self.map_module = timm.create_model(
             model_name,
             pretrained=True,
-            in_chans=in_channels,
-            num_classes=self.n_out,
+            in_chans=3,
+            num_classes=self.n_out_map,
+        )
+
+        self.agents_module = AgentsModule()
+
+        self.head = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_hidden//2),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden//2, self.n_hidden//4),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden//4, self.n_hidden//8),
+            nn.ReLU(),
+            nn.Dropout(0.5),
+            nn.Linear(self.n_hidden, self.n_out)
         )
 
 
-    def forward(self, x):
 
-        outputs = self.model(x)
+    def forward(self, x_map, x_ego, bb_ego, x_agents, bb_agents):
+
+        out_map = self.map_module(x_map)
+
+        out_agents = self.agents_module(x_ego, bb_ego, x_agents, bb_agents)
+
+        out_tot = torch.cat([out_map,out_agents],dim=-1)
+
+        outputs = self.head(out_tot)
 
         confidences_logits, logits = (
             outputs[:, : self.n_traj],
@@ -51,6 +77,7 @@ class Model(nn.Module):
         )
 
         logits = logits.view(-1, self.n_traj, self.time_limit, 3)
+        logits = logits.cumsum(dim=2)
 
         return confidences_logits, logits
 
@@ -156,34 +183,38 @@ class LightningModel(LightningModule):
 
         for tind in range(self.history-1,self.history-1+self.future_window-1):
 
-            if tind>self.history-1:
+            # if tind>self.history-1:
 
-                # rasterstarttime = time.time()
+            # rasterstarttime = time.time()
 
-                raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
-                x = raster_dict["raster"]
-                y = raster_dict["gt_marginal"]
-                is_available = raster_dict["future_val_marginal"]
-                
-                # rastertime += time.time()-rasterstarttime
+            raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
+            x_map = raster_dict["raster"]
+            y = raster_dict["gt_marginal"]
+            is_available = raster_dict["future_val_marginal"]
+            x_ego = raster_dict["x_ego"]
+            bb_ego = raster_dict["bb_ego"]
+            x_agents = raster_dict["x_agents"]
+            bb_agents = raster_dict["bb_agents"]
+            
+            # rastertime += time.time()-rasterstarttime
 
-            else:
-                # first batch, no need to rasterize
-                x = batch["raster"]
-                y = batch["gt_marginal"]
-                is_available = batch["future_val_marginal"]
+            # else:
+            #     # first batch, no need to rasterize
+            #     x = batch["raster"]
+            #     y = batch["gt_marginal"]
+            #     is_available = batch["future_val_marginal"]
 
-                batchsize = XY.shape[0]
-                btchrng = torch.arange(batchsize)
-                yaw_ego = YAW[btchrng, batch["agent_ind"]]
-                future_yaw = yaw_ego[:,tind+1:]
-                current_yaw = yaw_ego[:,tind]
-                future_yaw = future_yaw - current_yaw.view(-1,1)
-                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+            #     batchsize = XY.shape[0]
+            #     btchrng = torch.arange(batchsize)
+            #     yaw_ego = YAW[btchrng, batch["agent_ind"]]
+            #     future_yaw = yaw_ego[:,tind+1:]
+            #     current_yaw = yaw_ego[:,tind]
+            #     future_yaw = future_yaw - current_yaw.view(-1,1)
+            #     y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
   
             if debug: np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
-            confidences_logits, logits = self.model(x)
+            confidences_logits, logits = self.model(x_map, x_ego, bb_ego, x_agents, bb_agents)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
@@ -210,28 +241,36 @@ class LightningModel(LightningModule):
 
         for tind in range(self.history-1,self.history-1+self.future_window-1):
 
-            if tind>self.history-1:
+            # if tind>self.history-1:
 
-                raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
-                x = raster_dict["raster"]
-                y = raster_dict["gt_marginal"]
-                is_available = raster_dict["future_val_marginal"]
+            # rasterstarttime = time.time()
 
-            else:
-                # first batch, no need to rasterize
-                x = batch["raster"]
-                y = batch["gt_marginal"]
-                is_available = batch["future_val_marginal"]    
+            raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
+            x_map = raster_dict["raster"]
+            y = raster_dict["gt_marginal"]
+            is_available = raster_dict["future_val_marginal"]
+            x_ego = raster_dict["x_ego"]
+            bb_ego = raster_dict["bb_ego"]
+            x_agents = raster_dict["x_agents"]
+            bb_agents = raster_dict["bb_agents"]
+            
+            # rastertime += time.time()-rasterstarttime
 
-                batchsize = XY.shape[0]
-                btchrng = torch.arange(batchsize)
-                yaw_ego = YAW[btchrng, batch["agent_ind"]]
-                future_yaw = yaw_ego[:,tind+1:]
-                current_yaw = yaw_ego[:,tind]
-                future_yaw = future_yaw - current_yaw.view(-1,1)
-                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+            # else:
+            #     # first batch, no need to rasterize
+            #     x = batch["raster"]
+            #     y = batch["gt_marginal"]
+            #     is_available = batch["future_val_marginal"]
 
-            confidences_logits, logits = self.model(x)
+            #     batchsize = XY.shape[0]
+            #     btchrng = torch.arange(batchsize)
+            #     yaw_ego = YAW[btchrng, batch["agent_ind"]]
+            #     future_yaw = yaw_ego[:,tind+1:]
+            #     current_yaw = yaw_ego[:,tind]
+            #     future_yaw = future_yaw - current_yaw.view(-1,1)
+            #     y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+
+            confidences_logits, logits = self.model(x_map, x_ego, bb_ego, x_agents, bb_agents)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 

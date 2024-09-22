@@ -166,15 +166,16 @@ class Rasterizer():
         roadmaps = self.get_road_map(centered_roadlines, roads_ids, tl_states_curr, tl_ids, tl_valid_curr)
 
         # Agent coordinates
-        self.maxags = XY.shape[1]
-        centered_others = torch.bmm( (XY.reshape(self.batchsize,-1,2) - pos_ego_curr.view(-1,1,2)) , rot_matrix)*self.zoom_fact + displacement
-        centered_others = centered_others.view(self.batchsize, self.maxags, -1, 2)
+        # self.maxags = XY.shape[1]
+        # centered_others = torch.bmm( (XY.reshape(self.batchsize,-1,2) - pos_ego_curr.view(-1,1,2)) , rot_matrix)*self.zoom_fact + displacement
+        # centered_others = centered_others.view(self.batchsize, self.maxags, -1, 2)
 
-        # Agents map
-        RES_EGO, RES_OTHER = self.get_agents_map(centered_others, angle_agents, lengths, widths, agind)
+        # # Agents map
+        # RES_EGO, RES_OTHER = self.get_agents_map(centered_others, angle_agents, lengths, widths, agind)
 
         # Combine maps
-        raster = torch.cat([roadmaps, RES_EGO, RES_OTHER],dim=1)
+        #raster = torch.cat([roadmaps, RES_EGO, RES_OTHER],dim=1)
+        raster = roadmaps
         raster = raster / 255 
         raster = raster.to(torch.float32)
     
@@ -226,6 +227,15 @@ class Rasterizer():
         future_val = future_valid[btchrng, agind]
         future_yaw_ego = future_yaw_all[btchrng, agind]
 
+        x_agents = torch.cat([XY,YAWS.unsqueeze(-1)],dim=-1)
+        x_ego = x_agents[btchrng, agind]
+        bb_agents = torch.cat([lengths,widths],dim=-1)
+        bb_ego = bb_agents[btchrng, agind]
+
+        # lengths_ego = lengths[btchrng, agind]
+        # widths_ego = widths[btchrng, agind]
+        # bb_ego = torch.cat([lengths_ego,widths_ego],dim=-1)
+
         pos_ego_curr = xy_val[:,-1]
         yaw_ego_curr = yaw_ego[:,-1]
 
@@ -243,6 +253,10 @@ class Rasterizer():
             "raster": raster,
             "gt_marginal": centered_gt,
             "future_val_marginal": future_val,
+            "x_ego": x_ego,
+            "bb_ego": bb_ego,
+            "x_agents":x_agents,
+            "bb_agents":bb_agents
         }
 
         return raster_dict
