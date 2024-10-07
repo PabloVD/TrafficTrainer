@@ -46,7 +46,6 @@ class Model(nn.Module):
         self.agents_module = AgentsModule(self.n_out_agents)
 
         self.head = nn.Sequential(
-            nn.Dropout(0.5),
             nn.Linear(self.n_hidden, self.n_hidden),
             nn.ReLU(),
             nn.Dropout(0.5),
@@ -290,7 +289,7 @@ class LightningModel(LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
         if self.sched=="multistep":
-            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(5, 30, 5)), gamma=0.5)
+            scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, list(range(5, 60, 10)), gamma=0.5)
         elif self.sched=="cyclic":
             scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1.e-2*self.lr, max_lr=self.lr, step_size_up=20,cycle_momentum=False)
         elif self.sched=="onecycle":

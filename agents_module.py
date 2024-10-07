@@ -10,9 +10,9 @@ class MLP(torch.nn.Module):
 
         layers = []
         for l in range(n_layers):
-            layers.append(Dropout(0.5))
             layers.append(Linear(in_channels, hid_channels))
             layers.append(ReLU())
+            layers.append(Dropout(0.5))
             in_channels = hid_channels
             hid_channels *= 2
             if l==n_layers-2:   hid_channels = out_channels
@@ -36,7 +36,7 @@ class AgentsModule(torch.nn.Module):
         n_channels = 10
         n_coords = 3
         n_in = n_channels*n_coords+2
-        n_layers = 5
+        n_layers = 3
         hid_channels = 128
 
         self.mlp_states_ego = MLP(n_in, n_out_ag, n_layers, hid_channels)
