@@ -44,8 +44,7 @@ class Rasterizer():
                         road_color = color_to_rgb[col]
                 #road_color = 0
 
-                rd = np.array( roadline, dtype=int)
-                # rd = roadline.to(torch.int)
+                rd = roadline.astype(int)
 
                 roadmap = cv2.polylines(
                     roadmap,
