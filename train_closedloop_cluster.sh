@@ -29,7 +29,7 @@ python3 lightning_train.py \
     --model ${MODEL_NAME}  \
     --loss ${LOSS} \
     --save_path ./logs/${LOSS}_${TIME_LIMIT}_${MODEL_NAME}_mlps \
-    --in-channels 23 \
+    --in-channels 3 \
     --time-limit ${TIME_LIMIT} \
     --n-traj 6 \
     --lr ${LR} \

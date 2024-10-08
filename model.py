@@ -35,6 +35,7 @@ class Model(nn.Module):
         self.n_out_agents = 1024
         self.n_hidden = self.n_out_map + 2*self.n_out_agents
         self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
+        self.past_window = in_channels
 
         self.map_module = timm.create_model(
             model_name,
@@ -43,7 +44,7 @@ class Model(nn.Module):
             num_classes=self.n_out_map,
         )
 
-        self.agents_module = AgentsModule(self.n_out_agents)
+        self.agents_module = AgentsModule(n_out_ag = self.n_out_agents, past_window = self.past_window)
 
         self.head = nn.Sequential(
             nn.Linear(self.n_hidden, self.n_hidden),
@@ -66,6 +67,8 @@ class Model(nn.Module):
     def forward(self, x_map, x_ego, bb_ego, x_agents, bb_agents):
 
         out_map = self.map_module(x_map)
+
+        x_ego, x_agents = x_ego[:,-self.past_window:], x_agents[:,:,-self.past_window:]
 
         out_agents = self.agents_module(x_ego, bb_ego, x_agents, bb_agents)
 

@@ -30,13 +30,12 @@ class MLP(torch.nn.Module):
 
 
 class AgentsModule(torch.nn.Module):
-    def __init__(self, n_out_ag = 1024):
+    def __init__(self, n_out_ag = 1024, past_window = 10):
         super().__init__()
 
-        n_channels = 10
         n_coords = 3
-        n_in = n_channels*n_coords+2
-        n_layers = 3
+        n_in = past_window*n_coords+2
+        n_layers = 5
         hid_channels = 128
 
         self.mlp_states_ego = MLP(n_in, n_out_ag, n_layers, hid_channels)
