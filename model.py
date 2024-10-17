@@ -51,6 +51,7 @@ class Model(nn.Module):
         )
 
         logits = logits.view(-1, self.n_traj, self.time_limit, 3)
+        logits = logits.cumsum(dim=2)
 
         return confidences_logits, logits
 
