@@ -1,14 +1,14 @@
  #!/bin/bash
 
-export DATAPATH="/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/"
-#export DATAPATH="/data2/122-2/Datasets/Waymo_tf_example/"
+#export DATAPATH="/home/tda/CARLA/TrafficGeneration/Datasets/Waymo_tf_example/"
+export DATAPATH="/data2/122-2/Datasets/Waymo_tf_example/"
 
-export DATATRAIN=${DATAPATH}rendered_train_fixed
-export DATAVALID=${DATAPATH}rendered_train_fixed
+export DATATRAIN=${DATAPATH}rendered_train_fixed_closedloop
+export DATAVALID=${DATAPATH}rendered_train_fixed_closedloop
 
 #export MODEL_NAME="resnet18"
 #export MODEL_NAME="xception71"
-export MODEL_NAME="vit_base_patch16_224"
+export MODEL_NAME="vit_large_patch32_224"
 
 export LR=0.0001
 
@@ -20,7 +20,7 @@ export LOSS="NLL"
 #export LOSS="L2"
 #export LOSS="L1"
 
-export BATCHSIZE=20
+export BATCHSIZE=50
 
 
 python3 lightning_train.py \
@@ -35,7 +35,7 @@ python3 lightning_train.py \
     --lr ${LR} \
     --batch-size $BATCHSIZE \
     --n-epochs 200 \
-    --devices 0 \
+    --devices 0 1 \
     --scheduler ${SCHEDULER} \
     --wd 0.
     
