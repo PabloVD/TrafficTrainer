@@ -14,7 +14,7 @@ IN_CHANNELS = 23
 TL = 80
 N_TRAJS = 6
 DEVICE = "gpu"
-load_checkoint = False
+load_checkoint = True
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -134,10 +134,14 @@ def main():
 
     # Load checkpoint
     if load_checkoint:
-        lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
-        checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
-        print("Loading from checkpoint",checkpoint)
-        model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, hparams=hparams)
+        try:
+            lastcheckpointdir = natsorted(glob.glob(save_path+"/lightning_logs/version_*"))[-1]
+            checkpoint = natsorted(glob.glob(lastcheckpointdir+"/checkpoints/*.ckpt"))[-1]
+            print("Loading from checkpoint",checkpoint)
+            model = LightningModel.load_from_checkpoint(checkpoint_path=checkpoint, hparams=hparams)
+        except:
+            print("No previous checkpoint available to load")
+            model = LightningModel(hparams)
     else:
         model = LightningModel(hparams)
 
