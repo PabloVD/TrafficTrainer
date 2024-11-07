@@ -33,31 +33,55 @@ class Model(nn.Module):
         self.n_hidden = 2**11
         self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
 
-        self.cnn = timm.create_model(
+        self.history = 10
+        self.classes_roads = 128
+        self.classes_agents = 128
+        self.in_fc = self.history*self.classes_agents + self.classes_roads
+
+        self.cnn_road = timm.create_model(
             model_name,
             pretrained=True,
-            in_chans=in_channels,
-            num_classes=self.n_out,
+            in_chans=3,
+            num_classes=self.classes_roads,
+        )
+
+        self.cnn_agents = timm.create_model(
+            model_name,
+            pretrained=True,
+            in_chans=2,
+            num_classes=self.classes_agents,
         )
 
         # Define the GRU
         self.gru_layers = 4
         self.gru_hidden = 128
-        self.gru = nn.GRU(self.n_out, self.gru_hidden, self.gru_layers, batch_first=True)
+        self.gru = nn.GRU(self.classes_agents, self.gru_hidden, self.gru_layers, batch_first=True)
 
-        self.fc = nn.Sequential(nn.Linear(self.gru_hidden, self.n_out),
+        self.fc = nn.Sequential(nn.Linear(self.in_fc, self.in_fc//2),
                                nn.ReLU(),
-                               nn.Linear(self.n_out, self.n_out),
+                               nn.Linear(self.in_fc//2, self.n_out),
                                nn.ReLU(),
                                nn.Linear(self.n_out, self.n_out))
 
 
     def forward(self, x, hidden):
 
-        out = self.cnn(x)
-        print("Out CNN",out.shape)
-        out, hidden = self.gru(out, hidden)
-        print("Out GRU",out.shape,hidden.shape)
+        batchsize, rastersize = x.shape[0], x.shape[-1]
+        x_road, x_ego, x_others = x[:,:3], x[:,3:3+self.history], x[:,3+self.history:]
+        x_ego = x_ego.unsqueeze(2)
+        x_others = x_others.unsqueeze(2)
+        x_agents = torch.cat([x_ego, x_others],dim=2)
+        x_agents = x_agents.view(batchsize*self.history, 2, rastersize, rastersize)
+
+        out_road = self.cnn_road(x_road)
+
+        out_agents = self.cnn_agents(x_agents)
+        out_agents = out_agents.view(batchsize, self.history, -1)
+
+        out_agents, hidden = self.gru(out_agents, hidden)
+
+        out = torch.cat([out_road, out_agents.reshape(batchsize, -1)],dim=-1)
+
         outputs = self.fc(out)
 
         confidences_logits, logits = (
@@ -70,17 +94,6 @@ class Model(nn.Module):
 
         return confidences_logits, logits, hidden
     
-    # Initializes hidden state
-    def init_hidden(self, batch_size):
-        
-        # Create two new tensors with sizes n_layers x batch_size x n_hidden,
-        # initialized to zero, for hidden state and cell state of LSTM
-        weight = next(self.parameters()).data
-
-        hidden = (weight.new(self.gru_layers, batch_size, self.gru_hidden).zero_(), weight.new(self.gru_layers, batch_size, self.gru_hidden).zero_())
-
-        return hidden
-
 
 # Lightning Module
 class LightningModel(LightningModule):
@@ -181,7 +194,7 @@ class LightningModel(LightningModule):
 
         loss = 0.
 
-        hidden = self.model.init_hidden(XY.shape[0])
+        hidden = None
 
         for tind in range(self.history-1,self.history-1+self.future_window-1):
 
@@ -190,7 +203,6 @@ class LightningModel(LightningModule):
                 # rasterstarttime = time.time()
 
                 raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
-                print("Raster dict",raster_dict.shape)
                 x = raster_dict["raster"]
                 y = raster_dict["gt_marginal"]
                 is_available = raster_dict["future_val_marginal"]
@@ -230,46 +242,48 @@ class LightningModel(LightningModule):
         return loss
 
 
-    # def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx):
 
         
-    #     XY = batch["XY"]
-    #     YAW = batch["YAWS"]
+        XY = batch["XY"]
+        YAW = batch["YAWS"]
 
-    #     loss = 0.
+        loss = 0.
 
-    #     for tind in range(self.history-1,self.history-1+self.future_window-1):
+        hidden = None
 
-    #         if tind>self.history-1:
+        for tind in range(self.history-1,self.history-1+self.future_window-1):
 
-    #             raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
-    #             x = raster_dict["raster"]
-    #             y = raster_dict["gt_marginal"]
-    #             is_available = raster_dict["future_val_marginal"]
+            if tind>self.history-1:
 
-    #         else:
-    #             # first batch, no need to rasterize
-    #             x = batch["raster"]
-    #             y = batch["gt_marginal"]
-    #             is_available = batch["future_val_marginal"]    
+                raster_dict = self.get_raster_input_torch(batch, XY, YAW, tind)
+                x = raster_dict["raster"]
+                y = raster_dict["gt_marginal"]
+                is_available = raster_dict["future_val_marginal"]
 
-    #             batchsize = XY.shape[0]
-    #             btchrng = torch.arange(batchsize)
-    #             yaw_ego = YAW[btchrng, batch["agent_ind"]]
-    #             future_yaw = yaw_ego[:,tind+1:]
-    #             current_yaw = yaw_ego[:,tind]
-    #             future_yaw = future_yaw - current_yaw.view(-1,1)
-    #             y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+            else:
+                # first batch, no need to rasterize
+                x = batch["raster"]
+                y = batch["gt_marginal"]
+                is_available = batch["future_val_marginal"]    
 
-    #         confidences_logits, logits = self.model(x)
-    #         logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
-    #         loss += self.loss(y, logits, confidences_logits, is_available)
+                batchsize = XY.shape[0]
+                btchrng = torch.arange(batchsize)
+                yaw_ego = YAW[btchrng, batch["agent_ind"]]
+                future_yaw = yaw_ego[:,tind+1:]
+                current_yaw = yaw_ego[:,tind]
+                future_yaw = future_yaw - current_yaw.view(-1,1)
+                y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
-    #         XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
+            confidences_logits, logits, hidden = self.model(x, hidden)
+            logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
+            loss += self.loss(y, logits, confidences_logits, is_available)
 
-    #     self.log("val_loss", loss)
+            XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
 
-    #     return loss
+        self.log("val_loss", loss)
+
+        return loss
     
 
 
