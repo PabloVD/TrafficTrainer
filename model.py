@@ -57,30 +57,40 @@ class Model(nn.Module):
         self.gru_hidden = 128
         self.gru = nn.GRU(self.classes_agents, self.gru_hidden, self.gru_layers, batch_first=True)
 
-        self.fc = nn.Sequential(nn.Linear(self.in_fc, self.in_fc//2),
+        self.fc = nn.Sequential(nn.Linear(self.in_fc, self.in_fc),
+                               nn.ReLU(),
+                               nn.Linear(self.in_fc, self.in_fc//2),
                                nn.ReLU(),
                                nn.Linear(self.in_fc//2, self.n_out),
                                nn.ReLU(),
                                nn.Linear(self.n_out, self.n_out))
+                
+    def group_agents_input(self, x):
 
-
-    def forward(self, x, hidden):
-
-        batchsize, rastersize = x.shape[0], x.shape[-1]
-        x_road, x_ego, x_others = x[:,:3], x[:,3:3+self.history], x[:,3+self.history:]
+        x_ego, x_others = x[:,3:3+self.history], x[:,3+self.history:]
         x_ego = x_ego.unsqueeze(2)
         x_others = x_others.unsqueeze(2)
         x_agents = torch.cat([x_ego, x_others],dim=2)
-        x_agents = x_agents.view(batchsize*self.history, 2, rastersize, rastersize)
+        return x_agents
 
-        out_road = self.cnn_road(x_road)
 
-        out_agents = self.cnn_agents(x_agents)
-        out_agents = out_agents.view(batchsize, self.history, -1)
+    def forward(self, x, latent_history, hidden):
 
-        out_agents, hidden = self.gru(out_agents, hidden)
+        batchsize = x.shape[0]
+        x_road = x[:,:3]
+        x_agents = self.group_agents_input(x)
+        x_agents = x_agents[:,-1]
 
-        out = torch.cat([out_road, out_agents.reshape(batchsize, -1)],dim=-1)
+        latent_road = self.cnn_road(x_road)
+        latent_agents = self.cnn_agents(x_agents)
+
+        latent_history = torch.cat([latent_history, latent_agents.unsqueeze(1)],dim=1)
+        latent_history = latent_history[:,-self.history:] # take the last self.history frames
+
+        out_agents, hidden = self.gru(latent_history, hidden)
+
+        # Maybe rethink this line
+        out = torch.cat([latent_road, out_agents.reshape(batchsize, -1)],dim=-1)
 
         outputs = self.fc(out)
 
@@ -92,7 +102,7 @@ class Model(nn.Module):
         logits = logits.view(-1, self.n_traj, self.time_limit, 3)
         logits = logits.cumsum(dim=2)
 
-        return confidences_logits, logits, hidden
+        return confidences_logits, logits, latent_history, hidden
     
 
 # Lightning Module
@@ -222,10 +232,16 @@ class LightningModel(LightningModule):
                 current_yaw = yaw_ego[:,tind]
                 future_yaw = future_yaw - current_yaw.view(-1,1)
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
+
+                latent_history = torch.zeros((x.shape[0],1,self.model.classes_agents),device=x.device)
+                x_agents = self.model.group_agents_input(x)
+                for it in range(self.history-1):
+                    latent_agents = self.model.cnn_agents(x_agents[:,it])
+                    latent_history = torch.cat([latent_history, latent_agents.unsqueeze(1)],dim=1)
   
             if debug: np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
-            confidences_logits, logits, hidden = self.model(x, hidden)
+            confidences_logits, logits, latent_history, hidden = self.model(x, latent_history, hidden)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
@@ -275,7 +291,13 @@ class LightningModel(LightningModule):
                 future_yaw = future_yaw - current_yaw.view(-1,1)
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
-            confidences_logits, logits, hidden = self.model(x, hidden)
+                latent_history = torch.zeros((x.shape[0],1,self.model.classes_agents),device=x.device)
+                x_agents = self.model.group_agents_input(x)
+                for it in range(self.history-1):
+                    latent_agents = self.model.cnn_agents(x_agents[:,it])
+                    latent_history = torch.cat([latent_history, latent_agents.unsqueeze(1)],dim=1)
+
+            confidences_logits, logits, latent_history, hidden = self.model(x, latent_history, hidden)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
             loss += self.loss(y, logits, confidences_logits, is_available)
 
