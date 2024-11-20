@@ -33,13 +33,15 @@ def export_model(modelname):
     # print(script.lr)
 
     torch.jit.save(script, "models/"+modelname+".pt")
+    print("Model correctly exported to: "+"models/"+modelname+".pt")
 
     model_loaded = torch.jit.load("models/"+modelname+".pt")
-    # print(model_loaded)
+
     # Test that some methods are correctly exported
-    print(model_loaded.lr)
+    # print(model_loaded)
+    # print(model_loaded.lr)
     print(model_loaded.next_step(pos, yaw, confs, logits))
-    print(model.rasterizer)
+    # print(model.rasterizer)
 
 def main():
 
