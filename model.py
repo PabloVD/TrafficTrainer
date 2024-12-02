@@ -36,7 +36,8 @@ class Model(nn.Module):
         self.history = 10
         self.classes_roads = 128
         self.classes_agents = 128
-        self.in_fc = self.history*self.classes_agents + self.classes_roads
+        #self.in_fc = self.history*self.classes_agents + self.classes_roads
+        self.in_fc = self.classes_agents + self.classes_roads
 
         self.cnn_road = timm.create_model(
             model_name,
@@ -76,7 +77,7 @@ class Model(nn.Module):
 
     def forward(self, x, latent_history, hidden):
 
-        batchsize = x.shape[0]
+        # batchsize = x.shape[0]
         x_road = x[:,:3]
         x_agents = self.group_agents_input(x)
         x_agents = x_agents[:,-1]
@@ -90,7 +91,8 @@ class Model(nn.Module):
         out_agents, hidden = self.gru(latent_history, hidden)
 
         # Maybe rethink this line
-        out = torch.cat([latent_road, out_agents.reshape(batchsize, -1)],dim=-1)
+        #out = torch.cat([latent_road, out_agents.reshape(batchsize, -1)],dim=-1)
+        out = torch.cat([latent_road, out_agents[:,-1]],dim=-1)
 
         outputs = self.fc(out)
 
