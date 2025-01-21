@@ -82,6 +82,10 @@ class Model(nn.Module):
         x_agents = self.group_agents_input(x)
         x_agents = x_agents[:,-1]
 
+        # x_road: (B,3,224,224)
+        # x_agents: (B,2,224,224)
+        # latent_road: (B,128)
+        # latent_agents: (B,128)
         latent_road = self.cnn_road(x_road)
         latent_agents = self.cnn_agents(x_agents)
 
@@ -90,6 +94,8 @@ class Model(nn.Module):
 
         out_agents, hidden = self.gru(latent_history, hidden)
 
+        # out_agents: (B,T,128)
+        # out: (B,(T+1)*128)
         # Maybe rethink this line
         out = torch.cat([latent_road, out_agents.reshape(batchsize, -1)],dim=-1)
         # out = torch.cat([latent_road, out_agents[:,-1]],dim=-1)
@@ -126,7 +132,8 @@ class LightningModel(LightningModule):
         self.loss_type = hparams["loss"]
 
         self.history = 10
-        self.future_window = 10#self.time_limit
+        self.future_window = 10
+        #self.future_window = self.time_limit
 
         if self.loss_type=="NLL":
             self.loss = NLL_loss()
@@ -227,6 +234,7 @@ class LightningModel(LightningModule):
                 y = batch["gt_marginal"]
                 is_available = batch["future_val_marginal"]
 
+                # Add ground truth yaw to y tensor
                 batchsize = XY.shape[0]
                 btchrng = torch.arange(batchsize)
                 yaw_ego = YAW[btchrng, batch["agent_ind"]]
@@ -235,6 +243,7 @@ class LightningModel(LightningModule):
                 future_yaw = future_yaw - current_yaw.view(-1,1)
                 y = torch.cat([y,future_yaw.unsqueeze(-1)],dim=-1)
 
+                # Populate latent history for agents
                 latent_history = torch.zeros((x.shape[0],1,self.model.classes_agents),device=x.device)
                 x_agents = self.model.group_agents_input(x)
                 for it in range(self.history-1):
