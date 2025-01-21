@@ -39,6 +39,8 @@ class Model(nn.Module):
         self.in_fc = self.history*self.classes_agents + self.classes_roads
         #self.in_fc = self.classes_agents + self.classes_roads
 
+        self.drop_rate = 0.5
+
         self.cnn_road = timm.create_model(
             model_name,
             pretrained=True,
@@ -60,12 +62,25 @@ class Model(nn.Module):
 
         self.fc = nn.Sequential(nn.Linear(self.in_fc, self.in_fc),
                                nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
+                               nn.Linear(self.in_fc, self.in_fc*2),
+                               nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
+                               nn.Linear(self.in_fc*2, self.in_fc*2),
+                               nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
+                               nn.Linear(self.in_fc*2, self.in_fc),
+                               nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
                                nn.Linear(self.in_fc, self.in_fc//2),
                                nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
                                nn.Linear(self.in_fc//2, self.n_out),
                                nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
                                nn.Linear(self.n_out, self.n_out))
-                
+        
+              
     def group_agents_input(self, x):
 
         x_ego, x_others = x[:,3:3+self.history], x[:,3+self.history:]
