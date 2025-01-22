@@ -27,11 +27,12 @@ class Model(nn.Module):
     def __init__(self, model_name, in_channels, time_limit, n_traj):
         super().__init__()
 
-        self.n_traj = n_traj
+        self.n_traj = 1
         self.time_limit = time_limit
 
         self.n_hidden = 2**11
-        self.n_out = self.n_traj * 3 * self.time_limit + self.n_traj
+        self.n_out = 3 * self.time_limit
+        self.latent_units = 512
 
         self.history = 10
         self.classes_roads = 128
@@ -60,25 +61,31 @@ class Model(nn.Module):
         self.gru_hidden = 128
         self.gru = nn.GRU(self.classes_agents, self.gru_hidden, self.gru_layers, batch_first=True)
 
-        self.fc = nn.Sequential(nn.Linear(self.in_fc, self.in_fc),
-                               nn.ReLU(),
-                               nn.Dropout(self.drop_rate),
-                               nn.Linear(self.in_fc, self.in_fc*2),
-                               nn.ReLU(),
-                               nn.Dropout(self.drop_rate),
-                               nn.Linear(self.in_fc*2, self.in_fc*2),
-                               nn.ReLU(),
-                               nn.Dropout(self.drop_rate),
-                               nn.Linear(self.in_fc*2, self.in_fc),
+        self.encoder = nn.Sequential(nn.Linear(self.in_fc, self.in_fc),
                                nn.ReLU(),
                                nn.Dropout(self.drop_rate),
                                nn.Linear(self.in_fc, self.in_fc//2),
                                nn.ReLU(),
                                nn.Dropout(self.drop_rate),
-                               nn.Linear(self.in_fc//2, self.n_out),
+                               nn.Linear(self.in_fc//2, self.latent_units*2),
+                               nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
+                               nn.Linear(self.latent_units*2, self.latent_units*2))
+    
+        self.decoder = nn.Sequential(nn.Linear(self.latent_units, self.latent_units),
+                               nn.ReLU(),
+                               nn.Dropout(self.drop_rate),
+                               nn.Linear(self.latent_units, self.n_out),
                                nn.ReLU(),
                                nn.Dropout(self.drop_rate),
                                nn.Linear(self.n_out, self.n_out))
+                               
+
+        
+    def sample_from_gaussian(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
         
               
     def group_agents_input(self, x):
@@ -115,17 +122,15 @@ class Model(nn.Module):
         out = torch.cat([latent_road, out_agents.reshape(batchsize, -1)],dim=-1)
         # out = torch.cat([latent_road, out_agents[:,-1]],dim=-1)
 
-        outputs = self.fc(out)
-
-        confidences_logits, logits = (
-            outputs[:, : self.n_traj],
-            outputs[:, self.n_traj :],
-        )
+        latent_out = self.encoder(out)
+        mu, logvar = latent_out[:, :self.latent_units], latent_out[:, self.latent_units:]
+        z = self.sample_from_gaussian(mu, logvar)
+        logits = self.decoder(z)
 
         logits = logits.view(-1, self.n_traj, self.time_limit, 3)
         logits = logits.cumsum(dim=2)
 
-        return confidences_logits, logits, latent_history, hidden
+        return mu, logvar, logits, latent_history, hidden
     
 
 # Lightning Module
@@ -267,9 +272,11 @@ class LightningModel(LightningModule):
   
             if debug: np.save(outpath+"/batch_torch"+str(batch_idx)+"_time_"+str(tind),x[0].cpu().detach().numpy())
 
-            confidences_logits, logits, latent_history, hidden = self.model(x, latent_history, hidden)
+            mu, logvar, logits, latent_history, hidden = self.model(x, latent_history, hidden)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
+            confidences_logits = torch.ones((logits.shape[0],1), device=logits.device)
             loss += self.loss(y, logits, confidences_logits, is_available)
+            loss += self.kl_divergence(mu, logvar)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
 
@@ -323,9 +330,11 @@ class LightningModel(LightningModule):
                     latent_agents = self.model.cnn_agents(x_agents[:,it])
                     latent_history = torch.cat([latent_history, latent_agents.unsqueeze(1)],dim=1)
 
-            confidences_logits, logits, latent_history, hidden = self.model(x, latent_history, hidden)
+            mu, logvar, logits, latent_history, hidden = self.model(x, latent_history, hidden)
             logits = logits[:,:,:self.time_limit-(tind-(self.history-1))]   # Take those available within the future window
+            confidences_logits = torch.ones((logits.shape[0],1), device=logits.device)
             loss += self.loss(y, logits, confidences_logits, is_available)
+            loss += self.kl_divergence(mu, logvar)
 
             XY, YAW = self.update_step(XY, YAW, confidences_logits, logits, batch["agent_ind"], tind)
 
@@ -334,6 +343,9 @@ class LightningModel(LightningModule):
         return loss
     
 
+    def kl_divergence(self, mu, logvar):
+        kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        return kl_div
 
     def configure_optimizers(self):
 
